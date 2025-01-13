@@ -333,6 +333,11 @@ class GeometryTest(parameterized.TestCase):
 
       _ = jax.jit(f)()
 
+  def test_build_standard_geometry_from_IMAS(self):
+    """Test that the default IMAS geometry can be built."""
+    intermediate = geometry.StandardGeometryIntermediates.from_IMAS()
+    geo = geometry.build_standard_geometry(intermediate)
+
 
 def face_to_cell(n_rho, face):
   cell = np.zeros(n_rho)
