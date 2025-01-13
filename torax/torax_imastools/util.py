@@ -106,6 +106,13 @@ def load_IMAS_data_from_netCDF(file_path: str) -> dict[str, np.ndarray]:
   equilibrium_ids = input.get('equilibrium')
   return equilibrium_ids
 
+@requires_module('imaspy')
+def load_IMAS_data_from_hdf5(directory_path: str) -> dict[str, np.ndarray]:
+  """Loads the equilibrium IDS for a single time slice from the path of a local directory containing it stored with hdf5 backend. The repository must contain the master.h5 file."""
+  imasuri = "imas:hdf5?path=" + directory_path
+  input = imaspy.DBEntry(imasuri, "r")
+  equilibrium_ids = input.get('equilibrium')
+  return equilibrium_ids
 
 @requires_module('imaspy')
 def write_ids_equilibrium_into_config(config: dict, equilibrium)->dict[str,np.ndarray]:
@@ -292,4 +299,3 @@ def face_to_cell(face):
   """
 
   return 0.5 * (face[:-1] + face[1:])
-
