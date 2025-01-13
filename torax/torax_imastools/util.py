@@ -16,15 +16,41 @@
 from typing import Dict
 import os
 import datetime
+import importlib
 
 import numpy as np
-import imaspy
 import yaml
-from imaspy.ids_toplevel import IDSToplevel
 import scipy
+try:
+    import imaspy
+    from imaspy.ids_toplevel import IDSToplevel
+except:
+    pass
 
 from torax.geometry import geometry_loader
 
+
+def requires_module(module_name):
+    """
+    Decorator that checks if a module can be imported.
+    Returns the function if the module is available,
+    otherwise raises an ImportError.
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                importlib.import_module(module_name)
+            except ImportError:
+                raise ImportError(
+                    f"Required module '{module_name}' is not installed. "
+                    "Make sure you install the needed optional dependencies."
+                )
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@requires_module('imaspy')
 def save_netCDF(directory_path: str | None,
                 file_name: str | None,
                 IDS):
@@ -48,6 +74,7 @@ def save_netCDF(directory_path: str | None,
        netcdf_entry.put(IDS)
 
 
+@requires_module('imaspy')
 def load_IMAS_equilibrium_from_Data_entry(file_path: str) -> dict[str, np.ndarray]:
   """Loads the equilibrium IDS for a single time slice from a specific data entry / scenario using the IMAS Access Layer
 
@@ -71,6 +98,7 @@ def load_IMAS_equilibrium_from_Data_entry(file_path: str) -> dict[str, np.ndarra
   return IMAS_data
 
 
+@requires_module('imaspy')
 def load_IMAS_data_from_netCDF(file_path: str) -> dict[str, np.ndarray]:
   """Loads the equilibrium IDS for a single time slice from an IMAS netCDF file path"""
   input = imaspy.DBEntry(file_path, "r")
@@ -78,6 +106,7 @@ def load_IMAS_data_from_netCDF(file_path: str) -> dict[str, np.ndarray]:
   return equilibrium_ids
 
 
+@requires_module('imaspy')
 def write_ids_equilibrium_into_config(config: dict, equilibrium)->dict[str,np.ndarray]:
   """Loads the equilibrium into the geometry config.
   Args:
@@ -91,6 +120,7 @@ def write_ids_equilibrium_into_config(config: dict, equilibrium)->dict[str,np.nd
   return config
 
 
+@requires_module('imaspy')
 def core_profiles_to_IMAS(ids, state, geometry):
   """Converts torax core_profiles to IMAS IDS.
   Takes the cell grid as a basis and converts values on face grid to cell.
@@ -146,6 +176,8 @@ def core_profiles_to_IMAS(ids, state, geometry):
   # ids. = face_to_cell(cp_state.currents.j_bootstrap_face)
   return ids
 
+
+@requires_module('imaspy')
 def geometry_from_IMAS(
   equilibrium_object: str | IDSToplevel,
   geometry_dir: str | None = None,
