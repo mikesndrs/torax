@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Useful functions for handling of IMAS IDSs and converts them into TORAX objects"""
-from typing import Dict
+from typing import Dict, Any
 import os
 import datetime
 import importlib
@@ -25,6 +25,7 @@ try:
     import imaspy
     from imaspy.ids_toplevel import IDSToplevel
 except:
+    IDSToplevel = Any
     pass
 
 from torax.geometry import geometry_loader
