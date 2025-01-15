@@ -221,8 +221,9 @@ def geometry_from_IMAS(
   B0 = np.abs(IMAS_data.global_quantities.magnetic_axis.b_field_phi)
   Rmaj = np.asarray(IMAS_data.boundary.geometric_axis.r)
 
-  # Poloidal flux
-  psi = -1 * IMAS_data.profiles_1d.psi
+  # Poloidal flux (switch sign between ddv3 and ddv4)
+  #psi = -1 * IMAS_data.profiles_1d.psi #ddv3
+  psi = 1 * IMAS_data.profiles_1d.psi #ddv4
   # toroidal flux
   Phi = -1 * IMAS_data.profiles_1d.phi
   # midplane radii
@@ -238,19 +239,21 @@ def geometry_from_IMAS(
   else:
       dvoldpsi = -1 * np.gradient(IMAS_data.profiles_1d.volume) \
           / np.gradient(IMAS_data.profiles_1d.psi)
+  #dpsi_drho_tor (switch sign between ddv3 and ddv4)
   if len(IMAS_data.profiles_1d.dpsi_drho_tor) > 0:
-      dpsidrhotor = -1 * IMAS_data.profiles_1d.dpsi_drho_tor
+      #dpsidrhotor = -1 * IMAS_data.profiles_1d.dpsi_drho_tor #ddv3
+      dpsidrhotor = 1 * IMAS_data.profiles_1d.dpsi_drho_tor #ddv4
   else:
-      dpsidrhotor = -1 * np.gradient(IMAS_data.profiles_1d.psi) \
-          / np.gradient(IMAS_data.profiles_1d.rho_tor)
+      #dpsidrhotor = -1 * np.gradient(IMAS_data.profiles_1d.psi) \
+      #    / np.gradient(IMAS_data.profiles_1d.rho_tor)           #ddv3
+      dpsidrhotor = 1 * np.gradient(IMAS_data.profiles_1d.psi) \
+          / np.gradient(IMAS_data.profiles_1d.rho_tor) #ddv4
   flux_surf_avg_RBp = IMAS_data.profiles_1d.gm7 * dpsidrhotor / (2 * np.pi) # dpsi, C0/C1
   flux_surf_avg_R2Bp2 = IMAS_data.profiles_1d.gm3 * (dpsidrhotor **2) / (4 * np.pi**2) # C4/C1
   flux_surf_avg_Bp2 = IMAS_data.profiles_1d.gm2 * (dpsidrhotor **2) / (4 * np.pi**2) # C3/C1
   int_dl_over_Bp = dvoldpsi #C1
   flux_surf_avg_1_over_R2 = IMAS_data.profiles_1d.gm1 # C2/C1
 
-   #TODO : Read Ip_profile from IMAS_data equilibrium IDS. With IMAS_data.profiles_1d.j_phi we might be able to compute Ip_profile.
-  #Important : j_phi works for IDSs with version < 3.42.0, to replace by j_phi for newer versions.
   #jtor = dI/drhon / (drho/dS) = dI/drhon / spr
   # spr = vpr / ( 2 * np.pi * Rmaj)
   # -> Ip_profile = integrate(y = spr * jtor, x= rhon, initial = 0.0)
