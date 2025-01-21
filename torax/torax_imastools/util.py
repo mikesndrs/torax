@@ -115,6 +115,16 @@ def load_IMAS_data_from_hdf5(directory_path: str) -> dict[str, np.ndarray]:
   return equilibrium_ids
 
 @requires_module('imaspy')
+def load_IMAS_data(path: str) -> dict[str, np.ndarray]:
+  """Loads the equilibrium IDS for a single time slice either from a netCDF file path or from an hdf5 file in the given directory path."""
+  if path[-3:] == ".nc":
+    return load_IMAS_data_from_netCDF(file_path=path)
+  else:
+    return load_IMAS_data_from_hdf5(directory_path=path)
+
+
+
+@requires_module('imaspy')
 def write_ids_equilibrium_into_config(config: dict, equilibrium)->dict[str,np.ndarray]:
   """Loads the equilibrium into the geometry config.
   Args:
@@ -217,15 +227,17 @@ def geometry_from_IMAS(
   else:
     raise ValueError('equilibrium_object must be a string (file path) or an IDS')
   IMAS_data = equilibrium.time_slice[0]
-
+  # b_field_phi has to be used for version >3.42.0, in previous versions it was b_field_tor.
   B0 = np.abs(IMAS_data.global_quantities.magnetic_axis.b_field_phi)
   Rmaj = np.asarray(IMAS_data.boundary.geometric_axis.r)
 
   # Poloidal flux (switch sign between ddv3 and ddv4)
   #psi = -1 * IMAS_data.profiles_1d.psi #ddv3
   psi = 1 * IMAS_data.profiles_1d.psi #ddv4
+
   # toroidal flux
-  Phi = -1 * IMAS_data.profiles_1d.phi
+  Phi = np.abs(IMAS_data.profiles_1d.phi)
+
   # midplane radii
   Rin = IMAS_data.profiles_1d.r_inboard
   Rout = IMAS_data.profiles_1d.r_outboard
