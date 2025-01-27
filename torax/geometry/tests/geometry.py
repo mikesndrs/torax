@@ -344,6 +344,8 @@ class GeometryTest(parameterized.TestCase):
   ])
   def test_build_standard_geometry_from_IMAS(self, equilibrium_object):
     """Test that the default IMAS geometry can be built."""
+    if importlib.util.find_spec('imaspy') is None:
+      self.skipTest('IMASPy optional dependency')
     intermediate = geometry.StandardGeometryIntermediates.from_IMAS(equilibrium_object = equilibrium_object)
     geo = geometry.build_standard_geometry(intermediate)
 

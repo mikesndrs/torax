@@ -740,12 +740,10 @@ class SimTest(sim_test_case.SimTestCase):
           )
       )
 
-  @pytest.mark.skipif(
-      importlib.util.find_spec('imaspy') is None,
-      reason='IMASPy optional dependency'
-  )
   def test_imas(self):
     """Integration test comparing to reference output from TORAX."""
+    if importlib.util.find_spec('imaspy') is None:
+      self.skipTest('IMASPy optional dependency')
     self._test_torax_sim(
         'test_imas.py',
         _ALL_PROFILES,
