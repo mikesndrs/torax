@@ -15,16 +15,17 @@
 """Unit tests for torax.geometry."""
 
 import dataclasses
-import os
+import importlib
 
 from absl.testing import absltest
 from absl.testing import parameterized
 import jax
 from jax import numpy as jnp
 import numpy as np
-from torax.config import build_sim
+import pytest
+
 from torax.geometry import geometry
-from torax.geometry import geometry_loader
+
 
 # Internal import.
 
@@ -333,8 +334,14 @@ class GeometryTest(parameterized.TestCase):
 
       _ = jax.jit(f)()
 
+  @pytest.mark.skipif(
+      importlib.util.find_spec('imaspy') is None,
+      reason='IMASPy optional dependency'
+  )
   @parameterized.parameters([
-      dict(equilibrium_object='ITERhybrid_COCOS17_IDS_ddv4.nc')])
+      dict(equilibrium_object='ITERhybrid_COCOS17_IDS_ddv4.nc'),
+      dict(equilibrium_object='ITERhybrid_COCOS17_IDS_hdf5_ddv4/equilibrium.h5'),
+  ])
   def test_build_standard_geometry_from_IMAS(self, equilibrium_object):
     """Test that the default IMAS geometry can be built."""
     intermediate = geometry.StandardGeometryIntermediates.from_IMAS(equilibrium_object = equilibrium_object)

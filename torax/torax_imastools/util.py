@@ -14,15 +14,14 @@
 
 """Useful functions for handling of IMAS IDSs and converts them into TORAX
 objects"""
-from typing import Dict, Any
-import os
 import datetime
 import importlib
+import os
+from typing import Any, Dict
 
 import numpy as np
-import yaml
 import scipy
-
+import yaml
 
 try:
     import imaspy
