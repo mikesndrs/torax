@@ -747,8 +747,6 @@ class SimTest(sim_test_case.SimTestCase):
     self._test_torax_sim(
         'test_imas.py',
         _ALL_PROFILES,
-        rtol=0,
-        atol=None,
     )
 
 

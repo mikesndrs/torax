@@ -340,7 +340,7 @@ class GeometryTest(parameterized.TestCase):
   )
   @parameterized.parameters([
       dict(equilibrium_object='ITERhybrid_COCOS17_IDS_ddv4.nc'),
-      dict(equilibrium_object='ITERhybrid_COCOS17_IDS_hdf5_ddv4/equilibrium.h5'),
+      dict(equilibrium_object='ITERhybrid_COCOS17_IDS_hdf5_ddv4'),
   ])
   def test_build_standard_geometry_from_IMAS(self, equilibrium_object):
     """Test that the default IMAS geometry can be built."""
