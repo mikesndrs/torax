@@ -20,10 +20,12 @@ previously executed TORAX reference:
 
 import os
 from typing import Optional, Sequence
+import importlib
 
 from absl.testing import absltest
 from absl.testing import parameterized
 import numpy as np
+import pytest
 from torax import output
 from torax import sim as sim_lib
 from torax import state
@@ -737,6 +739,19 @@ class SimTest(sim_test_case.SimTestCase):
               geometry.build_circular_geometry(n_rho=10)
           )
       )
+
+  @pytest.mark.skipif(
+      importlib.util.find_spec('imaspy') is None,
+      reason='IMASPy optional dependency'
+  )
+  def test_imas(self):
+    """Integration test comparing to reference output from TORAX."""
+    self._test_torax_sim(
+        'test_imas.py',
+        _ALL_PROFILES,
+        rtol=0,
+        atol=None,
+    )
 
 
 def verify_core_profiles(ref_profiles, index, core_profiles):
