@@ -334,16 +334,14 @@ class GeometryTest(parameterized.TestCase):
 
       _ = jax.jit(f)()
 
-  @pytest.mark.skipif(
-      importlib.util.find_spec('imaspy') is None,
-      reason='IMASPy optional dependency'
-  )
   @parameterized.parameters([
       dict(equilibrium_object='ITERhybrid_COCOS17_IDS_ddv4.nc'),
       dict(equilibrium_object='ITERhybrid_COCOS17_IDS_hdf5_ddv4/equilibrium.h5'),
   ])
   def test_build_standard_geometry_from_IMAS(self, equilibrium_object):
     """Test that the default IMAS geometry can be built."""
+    if importlib.util.find_spec('imaspy') is None:
+      self.skipTest('IMASPy optional dependency')
     intermediate = geometry.StandardGeometryIntermediates.from_IMAS(equilibrium_object = equilibrium_object)
     geo = geometry.build_standard_geometry(intermediate)
 

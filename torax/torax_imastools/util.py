@@ -42,9 +42,7 @@ def requires_module(module_name: str):
 
     def decorator(func):
         def wrapper(*args, **kwargs):
-            try:
-                importlib.import_module(module_name)
-            except ImportError:
+            if importlib.util.find_spec(module_name) is None:
                 raise ImportError(
                     f"Required module '{module_name}' is not installed. "
                     "Make sure you install the needed optional dependencies."
