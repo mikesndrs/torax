@@ -227,7 +227,7 @@ def geometry_to_IMAS(geometry, core_profiles, post_processed_outputs, equilibriu
           / np.gradient(eq.profiles_1d.rho_tor)
       )
       eq.profiles_1d.dvolume_dpsi = dvoldpsi
-      eq..profiles_1d.dpsi_drho_tor = dpsidrhotor
+      eq.profiles_1d.dpsi_drho_tor = dpsidrhotor
       eq.profiles_1d.gm1 = geometry.g3
       eq.profiles_1d.gm7 = geometry.g0/(dvoldpsi * dpsidrhotor)
       eq.profiles_1d.gm3 = geometry.g1 / (dpsidrhotor ** 2 * dvoldpsi**2)
