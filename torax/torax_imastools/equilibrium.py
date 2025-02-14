@@ -24,9 +24,9 @@ try:
     from imaspy.ids_toplevel import IDSToplevel
 except ImportError:
     IDSToplevel = Any
-
+from torax import constants
 from torax.geometry import geometry_loader
-from torax.torax_imastools.util import requires_module
+from torax.torax_imastools.util import requires_module, face_to_cell
 
 
 @requires_module("imaspy")
@@ -86,9 +86,7 @@ def geometry_from_IMAS(
     else:
         raise ValueError("equilibrium_object must be a string (file path) or an IDS")
     IMAS_data = equilibrium.time_slice[0]
-    # b_field_phi has to be used for version >3.42.0
-    # in previous versions it was b_field_tor.
-    B0 = np.abs(IMAS_data.global_quantities.magnetic_axis.b_field_phi)
+    B0 = np.abs(equilibrium.vacuum_toroidal_field.b0)
     Rmaj = np.asarray(IMAS_data.boundary.geometric_axis.r)
 
     # Poloidal flux (switch sign between ddv3 and ddv4)
@@ -96,13 +94,13 @@ def geometry_from_IMAS(
     psi = 1 * IMAS_data.profiles_1d.psi  # ddv4
 
     # toroidal flux
-    Phi = np.abs(IMAS_data.profiles_1d.phi)
+    Phi = -1 * IMAS_data.profiles_1d.phi
 
     # midplane radii
     Rin = IMAS_data.profiles_1d.r_inboard
     Rout = IMAS_data.profiles_1d.r_outboard
     # toroidal field flux function
-    F = np.abs(IMAS_data.profiles_1d.f)
+    F = -1 * IMAS_data.profiles_1d.f
 
     # Flux surface integrals of various geometry quantities
     # IDS Contour integrals
@@ -174,3 +172,93 @@ def geometry_from_IMAS(
         "hires_fac": hires_fac,
         "z_magnetic_axis": z_magnetic_axis,
     }
+
+@requires_module("imaspy")
+def geometry_to_IMAS(geometry, core_profiles, post_processed_outputs, equilibrium_in: None= None) -> IDSToplevel:
+    """Constructs an IMAS equilibrium IDS from a StandardGeometry object.
+    Takes the cell grid as a basis and converts values on face grid to cell.
+    Args:
+      geometry: TORAX StandardGeometry object.
+      core_profiles: TORAX core_profiles for q profile.
+      post_processed_outputs: TORAX post_processed_outputs containing useful
+        variables for coupling with equilibrium code such as p' and FF'.
+      equilibrium_in: Optional, can reuse the input equilibrium to directly read
+        the equilibrium instead of rebuilding it from scratch through StandardGeometryIntermediates.
+    Returns:
+      equilibrium IDS based on the current TORAX sim.State object.
+    """
+
+    if equilibrium_in == None:
+      #equilibrium_in not provided, thus rebuilding everything from the geometry object (Which should remain unchanged by the transport code)
+      eq = imaspy.IDSFactory().equilibrium()
+      eq.ids_properties.homogeneous_time = 0
+      eq.ids_properties.comment = "equilibrium IDS build from TORAX StandardGeometry object."
+      eq.vacuum_toroidal_field.b0 = -1 * geometry.B
+      eq.time_slice.resize(1)
+      eq = eq.time_slice[0]
+      eq.boundary.geometric_axis.r = geometry.Rmaj
+      eq.boundary.minor_radius = geometry.Rmin
+      # determine sign how?
+      eq.profiles_1d.psi = core_profiles.psi
+      # determine sign how?
+      eq.profiles_1d.phi = -1 * geometry.Phi
+      eq.profiles_1d.r_inboard = geometry.Rin
+      eq.profiles_1d.r_outboard = geometry.Rout
+
+      eq.profiles_1d.triangularity_upper = face_to_cell(geometry.delta_upper_face)
+      eq.profiles_1d.triangularity_lower = face_to_cell(geometry.delta_lower_face)
+      eq.profiles_1d.elongation = geometry.elongation
+      eq.global_quantities.magnetic_axis.z = geometry.z_magnetic_axis
+
+      eq.profiles_1d.j_phi = geometry.jtot
+      eq.profiles_1d.volume = geometry.volume
+      eq.profiles_1d.area = geometry.area
+      eq.profiles_1d.rho_tor = np.sqrt(geometry.Phi / (np.pi * geometry.B))
+      eq.profiles_1d.rho_tor_norm = geometry.mesh.cell_centers
+
+      dvoldpsi = (
+            1
+            * np.gradient(eq.profiles_1d.volume)
+            / np.gradient(eq.profiles_1d.psi)
+        )
+      dpsidrhotor = (
+          1
+          * np.gradient(eq.profiles_1d.psi)
+          / np.gradient(eq.profiles_1d.rho_tor)
+      )
+      eq.profiles_1d.dvolume_dpsi = dvoldpsi
+      eq..profiles_1d.dpsi_drho_tor = dpsidrhotor
+      eq.profiles_1d.gm1 = geometry.g3
+      eq.profiles_1d.gm7 = geometry.g0/(dvoldpsi * dpsidrhotor)
+      eq.profiles_1d.gm3 = geometry.g1 / (dpsidrhotor ** 2 * dvoldpsi**2)
+      eq.profiles_1d.gm2 = geometry.g2 / (dpsidrhotor ** 2 * dvoldpsi**2)
+
+    else:
+        eq = equilibrium_in
+
+    #Quantities computed by the transport code useful for coupling with equilibrium code
+    eq.profiles_1d.pressure = face_to_cell(post_processed_outputs.pressure_thermal_tot_face)
+    eq.profiles_1d.dpressure_dpsi = face_to_cell(post_processed_outputs.pprime_face)
+
+    #<j.B>/B0, could be useful to calculate and use instead of FF' (Formula not checked, has to be tested and verified)
+    prefactor = (geometry.F_face **2
+      * 2 * np.pi
+      / np.sqrt(geometry.Phi / (np.pi * geometry.B))
+      / geometry.Phib
+      / dvoldpsi
+      / (16 * np.pi**3 * constants.CONSTANTS.mu0)
+      )
+    eq.profiles_1d.j_parallel = (
+      prefactor * (
+      core_profiles.psi.face_grad()
+      * geometry.g2g3_over_rhon_face +
+      geometry.g2g3_over_rhon_face.face_grad()
+      * core_profiles.psi
+      )
+    )
+    # determine sign how?
+    eq.profiles_1d.f = -1 * geometry.F #Is probably not self-consistent due to the evolution of the state by the solver.
+    eq.profiles_1d.f_df_dpsi = face_to_cell(post_processed_outputs.FFprime_face)
+    eq.profiles_1d.q = face_to_cell(core_profiles.q_face)
+
+    return eq
