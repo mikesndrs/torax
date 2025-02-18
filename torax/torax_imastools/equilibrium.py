@@ -190,16 +190,18 @@ def geometry_to_IMAS(geometry, core_profiles, post_processed_outputs, equilibriu
 
     if equilibrium_in == None:
       #equilibrium_in not provided, thus rebuilding everything from the geometry object (Which should remain unchanged by the transport code)
-      eq = imaspy.IDSFactory().equilibrium()
-      eq.ids_properties.homogeneous_time = 0
-      eq.ids_properties.comment = "equilibrium IDS build from TORAX StandardGeometry object."
-      eq.vacuum_toroidal_field.b0 = -1 * geometry.B
-      eq.time_slice.resize(1)
-      eq = eq.time_slice[0]
+      equilibrium = imaspy.IDSFactory().equilibrium()
+      equilibrium.ids_properties.homogeneous_time = 1
+      equilibrium.ids_properties.comment = "equilibrium IDS built from TORAX State object."
+      equilibrium.time.resize(1)
+      equilibrium.time = [0.] #What time should be set ? Needed for B0
+      equilibrium.vacuum_toroidal_field.b0 = -1 * geometry.B0
+      equilibrium.time_slice.resize(1)
+      eq = equilibrium.time_slice[0]
       eq.boundary.geometric_axis.r = geometry.Rmaj
       eq.boundary.minor_radius = geometry.Rmin
       # determine sign how?
-      eq.profiles_1d.psi = core_profiles.psi
+      eq.profiles_1d.psi = core_profiles.psi.value.copy()
       # determine sign how?
       eq.profiles_1d.phi = -1 * geometry.Phi
       eq.profiles_1d.r_inboard = geometry.Rin
@@ -213,8 +215,8 @@ def geometry_to_IMAS(geometry, core_profiles, post_processed_outputs, equilibriu
       eq.profiles_1d.j_phi = geometry.jtot
       eq.profiles_1d.volume = geometry.volume
       eq.profiles_1d.area = geometry.area
-      eq.profiles_1d.rho_tor = np.sqrt(geometry.Phi / (np.pi * geometry.B))
-      eq.profiles_1d.rho_tor_norm = geometry.mesh.cell_centers
+      eq.profiles_1d.rho_tor = np.sqrt(geometry.Phi / (np.pi * geometry.B0))
+      eq.profiles_1d.rho_tor_norm = geometry.torax_mesh.cell_centers
 
       dvoldpsi = (
             1
@@ -241,24 +243,28 @@ def geometry_to_IMAS(geometry, core_profiles, post_processed_outputs, equilibriu
     eq.profiles_1d.dpressure_dpsi = face_to_cell(post_processed_outputs.pprime_face)
 
     #<j.B>/B0, could be useful to calculate and use instead of FF' (Formula not checked, has to be tested and verified)
-    prefactor = (geometry.F_face **2
+    prefactor = (face_to_cell(geometry.F_face) **2
       * 2 * np.pi
-      / np.sqrt(geometry.Phi / (np.pi * geometry.B))
+      / np.sqrt(geometry.Phi / (np.pi * geometry.B0))
       / geometry.Phib
       / dvoldpsi
       / (16 * np.pi**3 * constants.CONSTANTS.mu0)
       )
     eq.profiles_1d.j_parallel = (
       prefactor * (
-      core_profiles.psi.face_grad()
-      * geometry.g2g3_over_rhon_face +
-      geometry.g2g3_over_rhon_face.face_grad()
-      * core_profiles.psi
+      face_to_cell(core_profiles.psi.face_grad()._value
+      * geometry.g2g3_over_rhon_face) +
+      face_to_cell(np.gradient(geometry.g2g3_over_rhon_face))
+      * core_profiles.psi.value
       )
     )
+    #Other formula for <j.B>/B0 from eq 34 in Pereverzev, G V, and P N Yushmanov. “ASTRA Automated System for TRansport Analysis,”
+    J = geometry.F_face / (geometry.B0 * geometry.Rmaj)
+    j_parallel = 2 * np.pi * face_to_cell(J) ** 2 * geometry.Rmaj * (np.gradient(face_to_cell(geometry.Ip_profile_face/ J)) / np.gradient(geometry.volume))
+
     # determine sign how?
     eq.profiles_1d.f = -1 * geometry.F #Is probably not self-consistent due to the evolution of the state by the solver.
     eq.profiles_1d.f_df_dpsi = face_to_cell(post_processed_outputs.FFprime_face)
     eq.profiles_1d.q = face_to_cell(core_profiles.q_face)
 
-    return eq
+    return equilibrium
