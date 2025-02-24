@@ -174,69 +174,67 @@ def geometry_from_IMAS(
     }
 
 @requires_module("imaspy")
-def geometry_to_IMAS(geometry, core_profiles, post_processed_outputs, equilibrium_in: None= None) -> IDSToplevel:
+def geometry_to_IMAS(SimState) -> IDSToplevel:
     """Constructs an IMAS equilibrium IDS from a StandardGeometry object.
     Takes the cell grid as a basis and converts values on face grid to cell.
     Args:
-      geometry: TORAX StandardGeometry object.
-      core_profiles: TORAX core_profiles for q profile.
-      post_processed_outputs: TORAX post_processed_outputs containing useful
-        variables for coupling with equilibrium code such as p' and FF'.
-      equilibrium_in: Optional, can reuse the input equilibrium to directly read
-        the equilibrium instead of rebuilding it from scratch through StandardGeometryIntermediates.
+      SimState: A ToraxSimState object containing:
+        geometry: TORAX StandardGeometry object.
+        core_profiles: TORAX core_profiles for q profile.
+        post_processed_outputs: TORAX post_processed_outputs containing useful
+          variables for coupling with equilibrium code such as p' and FF'.
     Returns:
       equilibrium IDS based on the current TORAX sim.State object.
     """
 
-    if equilibrium_in == None:
-      #equilibrium_in not provided, thus rebuilding everything from the geometry object (Which should remain unchanged by the transport code)
-      equilibrium = imaspy.IDSFactory().equilibrium()
-      equilibrium.ids_properties.homogeneous_time = 1
-      equilibrium.ids_properties.comment = "equilibrium IDS built from TORAX State object."
-      equilibrium.time.resize(1)
-      equilibrium.time = [0.] #What time should be set ? Needed for B0
-      equilibrium.vacuum_toroidal_field.b0 = -1 * geometry.B0
-      equilibrium.time_slice.resize(1)
-      eq = equilibrium.time_slice[0]
-      eq.boundary.geometric_axis.r = geometry.Rmaj
-      eq.boundary.minor_radius = geometry.Rmin
-      # determine sign how?
-      eq.profiles_1d.psi = core_profiles.psi.value.copy()
-      # determine sign how?
-      eq.profiles_1d.phi = -1 * geometry.Phi
-      eq.profiles_1d.r_inboard = geometry.Rin
-      eq.profiles_1d.r_outboard = geometry.Rout
+    geometry = SimState.geometry
+    core_profiles = SimState.core_profiles
+    post_processed_outputs = SimState.post_processed_outputs
+    #equilibrium_in not provided, thus rebuilding everything from the geometry object (Which should remain unchanged by the transport code)
+    equilibrium = imaspy.IDSFactory().equilibrium()
+    equilibrium.ids_properties.homogeneous_time = 1 #Should be 0 or 1 ?
+    equilibrium.ids_properties.comment = "equilibrium IDS built from TORAX State object."
+    equilibrium.time.resize(1)
+    equilibrium.time = [0.] #What time should be set ? Needed for B0
+    equilibrium.vacuum_toroidal_field.b0 = -1 * geometry.B0
+    equilibrium.time_slice.resize(1)
+    eq = equilibrium.time_slice[0]
+    eq.boundary.geometric_axis.r = geometry.Rmaj
+    eq.boundary.minor_radius = geometry.Rmin
+    # determine sign how?
+    eq.profiles_1d.psi = core_profiles.psi.value.copy()
+    # determine sign how?
+    eq.profiles_1d.phi = -1 * geometry.Phi
+    eq.profiles_1d.r_inboard = geometry.Rin
+    eq.profiles_1d.r_outboard = geometry.Rout
 
-      eq.profiles_1d.triangularity_upper = face_to_cell(geometry.delta_upper_face)
-      eq.profiles_1d.triangularity_lower = face_to_cell(geometry.delta_lower_face)
-      eq.profiles_1d.elongation = geometry.elongation
-      eq.global_quantities.magnetic_axis.z = geometry.z_magnetic_axis
+    eq.profiles_1d.triangularity_upper = face_to_cell(geometry.delta_upper_face)
+    eq.profiles_1d.triangularity_lower = face_to_cell(geometry.delta_lower_face)
+    eq.profiles_1d.elongation = geometry.elongation
+    eq.global_quantities.magnetic_axis.z = geometry.z_magnetic_axis
 
-      eq.profiles_1d.j_phi = geometry.jtot
-      eq.profiles_1d.volume = geometry.volume
-      eq.profiles_1d.area = geometry.area
-      eq.profiles_1d.rho_tor = np.sqrt(geometry.Phi / (np.pi * geometry.B0))
-      eq.profiles_1d.rho_tor_norm = geometry.torax_mesh.cell_centers
+    eq.profiles_1d.j_phi = geometry.jtot
+    eq.profiles_1d.volume = geometry.volume
+    eq.profiles_1d.area = geometry.area
+    eq.profiles_1d.rho_tor = np.sqrt(geometry.Phi / (np.pi * geometry.B0))
+    eq.profiles_1d.rho_tor_norm = geometry.torax_mesh.cell_centers
 
-      dvoldpsi = (
-            1
-            * np.gradient(eq.profiles_1d.volume)
-            / np.gradient(eq.profiles_1d.psi)
-        )
-      dpsidrhotor = (
+    dvoldpsi = (
           1
-          * np.gradient(eq.profiles_1d.psi)
-          / np.gradient(eq.profiles_1d.rho_tor)
+          * np.gradient(eq.profiles_1d.volume)
+          / np.gradient(eq.profiles_1d.psi)
       )
-      eq.profiles_1d.dvolume_dpsi = dvoldpsi
-      eq.profiles_1d.dpsi_drho_tor = dpsidrhotor
-      eq.profiles_1d.gm1 = geometry.g3
-      eq.profiles_1d.gm7 = geometry.g0/(dvoldpsi * dpsidrhotor)
-      eq.profiles_1d.gm3 = geometry.g1 / (dpsidrhotor ** 2 * dvoldpsi**2)
-      eq.profiles_1d.gm2 = geometry.g2 / (dpsidrhotor ** 2 * dvoldpsi**2)
-
-    else:
-        eq = equilibrium_in
+    dpsidrhotor = (
+        1
+        * np.gradient(eq.profiles_1d.psi)
+        / np.gradient(eq.profiles_1d.rho_tor)
+    )
+    eq.profiles_1d.dvolume_dpsi = dvoldpsi
+    eq.profiles_1d.dpsi_drho_tor = dpsidrhotor
+    eq.profiles_1d.gm1 = geometry.g3
+    eq.profiles_1d.gm7 = geometry.g0/(dvoldpsi * dpsidrhotor)
+    eq.profiles_1d.gm3 = geometry.g1 / (dpsidrhotor ** 2 * dvoldpsi**2)
+    eq.profiles_1d.gm2 = geometry.g2 / (dpsidrhotor ** 2 * dvoldpsi**2)
 
     #Quantities computed by the transport code useful for coupling with equilibrium code
     eq.profiles_1d.pressure = face_to_cell(post_processed_outputs.pressure_thermal_tot_face)
