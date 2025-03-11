@@ -59,8 +59,7 @@ def geometry_from_IMAS(
       equilibrium_object: Either directly the equilbrium IDS containing the
         relevant data, or the name of the IMAS netCDF file containing the
         equilibrium.
-      geometry_dir: Directory where to find the scenario file ontaining the
-        parameters of the Data entry to read.
+      geometry_dir: Directory where to find the equilibrium object.
         If None, uses the environment variable TORAX_GEOMETRY_DIR if
         available. If that variable is not set and geometry_dir is not
         provided, then it defaults to another dir. See `load_geo_data`
@@ -86,8 +85,8 @@ def geometry_from_IMAS(
     else:
         raise ValueError("equilibrium_object must be a string (file path) or an IDS")
     IMAS_data = equilibrium.time_slice[0]
-    B0 = np.abs(equilibrium.vacuum_toroidal_field.b0)
-    Rmaj = np.asarray(IMAS_data.boundary.geometric_axis.r)
+    B0 = np.abs(equilibrium.vacuum_toroidal_field.b0) #Shoudld it be replaced by reference value .time_slice[0].global_quantities.b_field_phi ?
+    Rmaj = np.asarray(IMAS_data.boundary.geometric_axis.r) #Shoudld it be replaced by reference value .vacuum_toroidal_field.r0 ?
 
     # Poloidal flux (switch sign between ddv3 and ddv4)
     # psi = -1 * IMAS_data.profiles_1d.psi #ddv3
@@ -190,12 +189,12 @@ def geometry_to_IMAS(SimState) -> IDSToplevel:
     geometry = SimState.geometry
     core_profiles = SimState.core_profiles
     post_processed_outputs = SimState.post_processed_outputs
-    #equilibrium_in not provided, thus rebuilding everything from the geometry object (Which should remain unchanged by the transport code)
+    #Rebuilding the equilibrium from the geometry object (Which should remain unchanged by the transport code), is it needed or do we only need coupling variables ?
     equilibrium = imaspy.IDSFactory().equilibrium()
     equilibrium.ids_properties.homogeneous_time = 1 #Should be 0 or 1 ?
-    equilibrium.ids_properties.comment = "equilibrium IDS built from TORAX State object."
+    equilibrium.ids_properties.comment = "equilibrium IDS built from ToraxSimState object."
     equilibrium.time.resize(1)
-    equilibrium.time = [0.] #What time should be set ? Needed for B0
+    equilibrium.time = [SimState.t] #What time should be set ? Needed for B0
     equilibrium.vacuum_toroidal_field.b0 = -1 * geometry.B0
     equilibrium.time_slice.resize(1)
     eq = equilibrium.time_slice[0]
@@ -213,7 +212,7 @@ def geometry_to_IMAS(SimState) -> IDSToplevel:
     eq.profiles_1d.elongation = geometry.elongation
     eq.global_quantities.magnetic_axis.z = geometry.z_magnetic_axis
 
-    eq.profiles_1d.j_phi = geometry.jtot
+    eq.profiles_1d.j_phi = -1 * geometry.jtot
     eq.profiles_1d.volume = geometry.volume
     eq.profiles_1d.area = geometry.area
     eq.profiles_1d.rho_tor = np.sqrt(geometry.Phi / (np.pi * geometry.B0))
@@ -241,25 +240,6 @@ def geometry_to_IMAS(SimState) -> IDSToplevel:
     eq.profiles_1d.dpressure_dpsi = face_to_cell(post_processed_outputs.pprime_face)
 
     #<j.B>/B0, could be useful to calculate and use instead of FF' (Formula not checked, has to be tested and verified)
-    prefactor = (face_to_cell(geometry.F_face) **2
-      * 2 * np.pi
-      / np.sqrt(geometry.Phi / (np.pi * geometry.B0))
-      / geometry.Phib
-      / dvoldpsi
-      / (16 * np.pi**3 * constants.CONSTANTS.mu0)
-      )
-    eq.profiles_1d.j_parallel = (
-      prefactor * (
-      face_to_cell(core_profiles.psi.face_grad()._value
-      * geometry.g2g3_over_rhon_face) +
-      face_to_cell(np.gradient(geometry.g2g3_over_rhon_face))
-      * core_profiles.psi.value
-      )
-    )
-    #Other formula for <j.B>/B0 from eq 34 in Pereverzev, G V, and P N Yushmanov. “ASTRA Automated System for TRansport Analysis,”
-    J = geometry.F_face / (geometry.B0 * geometry.Rmaj)
-    j_parallel = 2 * np.pi * face_to_cell(J) ** 2 * geometry.Rmaj * (np.gradient(face_to_cell(geometry.Ip_profile_face/ J)) / np.gradient(geometry.volume))
-
     # determine sign how?
     eq.profiles_1d.f = -1 * geometry.F #Is probably not self-consistent due to the evolution of the state by the solver.
     eq.profiles_1d.f_df_dpsi = face_to_cell(post_processed_outputs.FFprime_face)
