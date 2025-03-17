@@ -70,8 +70,10 @@ CONFIG = {
     },
     'geometry': {
         'geometry_type': 'imas',
-        'equilibrium_object': 'ITERhybrid_COCOS17_IDS_ddv4.nc',
+        #'equilibrium_object': 'ITERhybrid_COCOS17_IDS_ddv4.nc',
+        'equilibrium_object': '',
         'Ip_from_parameters': False,
+        'geometry_dir': '/home/ITER/vanschr/public/imasdb/ITER/4/666666/101/',
     },
     'sources': {
         # Current sources (for psi equation)

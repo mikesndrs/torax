@@ -70,9 +70,13 @@ from torax.pedestal_model import runtime_params as pedestal_runtime_params_lib
 from torax.sources import runtime_params as source_runtime_params_lib
 from torax.stepper import runtime_params as stepper_runtime_params_lib
 from torax.transport_model import runtime_params as transport_runtime_params_lib
+from torax.torax_imastools.equilibrium import geometry_to_IMAS
+from torax.torax_imastools.util import load_IMAS_data
 import xarray as xr
 
 import shutil
+import imas
+import imaspy
 
 
 # String printed before printing the output file path
@@ -252,6 +256,18 @@ def main(
   )
   log_to_stdout('Finished running simulation.', color=AnsiColors.GREEN)
   state_history = output.StateHistory(sim_outputs, sim.source_models)
+
+
+  # Get from sim_outputs the last sim_state of the simulation to create an equilibrium IDS from (HARDCODED FOR TEST - RICK)
+  sim_state_final = sim_outputs.sim_history[-1]
+
+  equilibrium = geometry_to_IMAS(sim_state_final)  
+
+  IDS_entry = imaspy.DBEntry(imaspy.ids_defs.HDF5_BACKEND, "ITER", 666666, 201, "vanschr", data_version="4")
+  IDS_entry.create()
+  IDS_entry.put(equilibrium)
+
+
 
   if plot_sim_progress:
     raise NotImplementedError('Plotting progress is temporarily disabled.')
