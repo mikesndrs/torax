@@ -317,6 +317,7 @@ class Geometry:
         [jnp.expand_dims(first_element, axis=-1), bulk], axis=-1
     )
 
+  @property
   def z_magnetic_axis(self) -> chex.Numeric:
     """z position of magnetic axis [m]."""
     z_magnetic_axis = self._z_magnetic_axis

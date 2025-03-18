@@ -261,12 +261,11 @@ def main(
   # Get from sim_outputs the last sim_state of the simulation to create an equilibrium IDS from (HARDCODED FOR TEST - RICK)
   sim_state_final = sim_outputs.sim_history[-1]
 
+  
   equilibrium = geometry_to_IMAS(sim_state_final)  
 
-  IDS_entry = imaspy.DBEntry(imaspy.ids_defs.HDF5_BACKEND, "ITER", 666666, 201, "vanschr", data_version="4")
-  IDS_entry.create()
-  IDS_entry.put(equilibrium)
-
+  with imaspy.DBEntry("imas:hdf5?path=/home/ITER/vanschr/public/imasdb/ITER/4/666666/201", "w") as db_entry:
+    db_entry.put_slice(equilibrium)
 
 
   if plot_sim_progress:
