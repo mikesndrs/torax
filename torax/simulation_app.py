@@ -78,6 +78,8 @@ import shutil
 import imas
 import imaspy
 
+from torax.plotting.plot_IDS_SimState_Rick import plot_IDS_ToraxSimState
+
 
 # String printed before printing the output file path
 WRITE_PREFIX: Final[str] = 'Wrote simulation output to '
@@ -259,13 +261,20 @@ def main(
 
 
   # Get from sim_outputs the last sim_state of the simulation to create an equilibrium IDS from (HARDCODED FOR TEST - RICK)
+  sim_state_initial = sim_outputs.sim_history[0]
   sim_state_final = sim_outputs.sim_history[-1]
 
-  
-  equilibrium = geometry_to_IMAS(sim_state_final)  
+  equilibrium_initial = load_IMAS_data('/home/ITER/vanschr/public/imasdb/ITER/4/666666/101','equilibrium')
+  equilibrium_final = geometry_to_IMAS(sim_state_final)  
 
-  with imaspy.DBEntry("imas:hdf5?path=/home/ITER/vanschr/public/imasdb/ITER/4/666666/201", "w") as db_entry:
-    db_entry.put_slice(equilibrium)
+
+
+  plot_IDS_ToraxSimState(equilibrium_final,sim_state_final,
+                         equilibrium_initial,sim_state_initial)
+
+
+  with imaspy.DBEntry("imas:hdf5?path=/home/ITER/vanschr/public/imasdb/ITER/4/666666/601", "w") as db_entry:
+    db_entry.put_slice(equilibrium_final)
 
 
   if plot_sim_progress:

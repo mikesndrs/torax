@@ -74,6 +74,7 @@ CONFIG = {
         'equilibrium_object': '',
         'Ip_from_parameters': False,
         'geometry_dir': '/home/ITER/vanschr/public/imasdb/ITER/4/666666/101/',
+        'n_rho': 25,
     },
     'sources': {
         # Current sources (for psi equation)
