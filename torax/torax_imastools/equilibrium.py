@@ -25,9 +25,9 @@ try:
 except ImportError:
     IDSToplevel = Any
 from torax import constants
+from torax import state
 from torax.geometry import geometry_loader
 from torax.torax_imastools.util import requires_module, face_to_cell
-
 
 @requires_module("imaspy")
 def write_ids_equilibrium_into_config(
@@ -40,7 +40,7 @@ def write_ids_equilibrium_into_config(
       equilibrium_object.
 
     Returns:
-    Full config object will the IDS inside."""
+    Full IMASconfig object for the geometry with the IDS inside."""
     config["geometry"]["geometry_type"] = "imas"
     config["geometry"]["equilibrium_object"] = equilibrium
     return config
@@ -85,8 +85,8 @@ def geometry_from_IMAS(
     else:
         raise ValueError("equilibrium_object must be a string (file path) or an IDS")
     IMAS_data = equilibrium.time_slice[0]
-    B0 = np.abs(equilibrium.vacuum_toroidal_field.b0[0]) #Shoudld it be replaced by reference value .time_slice[0].global_quantities.b_field_phi ?
-    Rmaj = np.asarray(IMAS_data.boundary.geometric_axis.r) #Shoudld it be replaced by reference value .vacuum_toroidal_field.r0 ?
+    B0 = np.abs(equilibrium.vacuum_toroidal_field.b0[0]) #Shoudld it be replaced by .time_slice[0].global_quantities.b_field_phi ?
+    Rmaj = np.asarray(equilibrium.vacuum_toroidal_field.r0) #Shoudld it be replaced by IMAS_data.boundary.geometric_axis.r ?
 
     # Poloidal flux (switch sign between ddv3 and ddv4)
     # psi = -1 * IMAS_data.profiles_1d.psi #ddv3
@@ -173,15 +173,16 @@ def geometry_from_IMAS(
     }
 
 @requires_module("imaspy")
-def geometry_to_IMAS(SimState) -> IDSToplevel:
+def geometry_to_IMAS(SimState: state.ToraxSimState, equilibrium_in: IDSToplevel | None=None) -> IDSToplevel:
     """Constructs an IMAS equilibrium IDS from a StandardGeometry object.
     Takes the cell grid as a basis and converts values on face grid to cell.
     Args:
       SimState: A ToraxSimState object containing:
-        geometry: TORAX StandardGeometry object.
-        core_profiles: TORAX core_profiles for q profile.
-        post_processed_outputs: TORAX post_processed_outputs containing useful
+        - geometry: TORAX StandardGeometry object.
+        - core_profiles: TORAX core_profiles for q profile.
+        - post_processed_outputs: TORAX post_processed_outputs containing useful
           variables for coupling with equilibrium code such as p' and FF'.
+      equilibrium_in: Optional equilibrium IDS to specify the plasma boundary which is not stored in TORAX variables but needed for coupling with NICE for example.
     Returns:
       equilibrium IDS based on the current TORAX sim.State object.
     """
@@ -197,6 +198,7 @@ def geometry_to_IMAS(SimState) -> IDSToplevel:
     equilibrium.time = [SimState.t] #What time should be set ? Needed for B0
     equilibrium.vacuum_toroidal_field.b0.resize(1)
     equilibrium.vacuum_toroidal_field.b0[0] = -1 * geometry.B0
+    equilibrium.vacuum_toroidal_field.r0 = geometry.Rmaj
     equilibrium.time_slice.resize(1)
     eq = equilibrium.time_slice[0]
     eq.boundary.geometric_axis.r = geometry.Rmaj
@@ -211,8 +213,8 @@ def geometry_to_IMAS(SimState) -> IDSToplevel:
     eq.profiles_1d.triangularity_upper = face_to_cell(geometry.delta_upper_face)
     eq.profiles_1d.triangularity_lower = face_to_cell(geometry.delta_lower_face)
     eq.profiles_1d.elongation = geometry.elongation
-    eq.global_quantities.magnetic_axis.z = geometry.z_magnetic_axis
-
+    eq.global_quantities.magnetic_axis.z = geometry._z_magnetic_axis
+    eq.global_quantities.ip = -1 * geometry.Ip_profile_face[-1]
     eq.profiles_1d.j_phi = -1 * geometry.jtot
     eq.profiles_1d.volume = geometry.volume
     eq.profiles_1d.area = geometry.area
@@ -240,10 +242,15 @@ def geometry_to_IMAS(SimState) -> IDSToplevel:
     eq.profiles_1d.pressure = face_to_cell(post_processed_outputs.pressure_thermal_tot_face)
     eq.profiles_1d.dpressure_dpsi = face_to_cell(post_processed_outputs.pprime_face)
 
-    #<j.B>/B0, could be useful to calculate and use instead of FF' (Formula not checked, has to be tested and verified)
+    #<j.B>/B0, could be useful to calculate and use instead of FF'
     # determine sign how?
     eq.profiles_1d.f = -1 * geometry.F #Is probably not self-consistent due to the evolution of the state by the solver.
     eq.profiles_1d.f_df_dpsi = face_to_cell(post_processed_outputs.FFprime_face)
     eq.profiles_1d.q = face_to_cell(core_profiles.q_face)
+
+    #Optionally maps fixed quantities not evolved by TORAX and read directly from input equilibrium. Needed to couple with NICE inverse
+    if equilibrium_in != None:
+      eq.boundary.outline.r = equilibrium_in.time_slice[0].boundary.outline.r
+      eq.boundary.outline.z = equilibrium_in.time_slice[0].boundary.outline.z
 
     return equilibrium
