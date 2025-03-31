@@ -265,12 +265,12 @@ def main(
   sim_state_final = sim_outputs.sim_history[-1]
 
   equilibrium_initial = load_IMAS_data('/home/ITER/vanschr/public/imasdb/ITER/4/666666/101','equilibrium')
-  equilibrium_final = geometry_to_IMAS(sim_state_final)  
+  equilibrium_final = geometry_to_IMAS(sim_state_final, equilibrium_initial)  
 
 
-
-  plot_IDS_ToraxSimState(equilibrium_final,sim_state_final,
-                         equilibrium_initial,sim_state_initial)
+  # Being able to plot IDS data against ToraxSimState data
+  #plot_IDS_ToraxSimState(equilibrium_final,sim_state_final,
+  #                       equilibrium_initial,sim_state_initial)
 
 
   with imaspy.DBEntry("imas:hdf5?path=/home/ITER/vanschr/public/imasdb/ITER/4/666666/601", "w") as db_entry:
