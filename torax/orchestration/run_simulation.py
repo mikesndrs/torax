@@ -63,14 +63,16 @@ def prep_simulation(
         mhd_models=mhd_models,
     )
 
-    static_runtime_params_slice = (
-        build_runtime_params.build_static_runtime_params_slice(
-            runtime_params=torax_config.runtime_params,
-            sources=torax_config.sources,
-            torax_mesh=torax_config.geometry.build_provider.torax_mesh,
-            stepper=torax_config.stepper,
-        )
-    )
+  static_runtime_params_slice = (
+      build_runtime_params.build_static_runtime_params_slice(
+          profile_conditions=torax_config.profile_conditions,
+          numerics=torax_config.numerics,
+          plasma_composition=torax_config.plasma_composition,
+          sources=torax_config.sources,
+          torax_mesh=torax_config.geometry.build_provider.torax_mesh,
+          stepper=torax_config.stepper,
+      )
+  )
 
   dynamic_runtime_params_slice_provider = (
       build_runtime_params.DynamicRuntimeParamsSliceProvider(
