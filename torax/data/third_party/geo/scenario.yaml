@@ -2,12 +2,9 @@
 # ---------------------------------
 # PARAMETERS OF THE INPUT SCENARIO
 # ---------------------------------
-shot:                130012
-run_in:              4
-input_user_or_path:  public
+shot:                100121
+run_in:              1
+input_user_or_path:  schneim
 input_database:      ITER
-
+scenario_backend:    hdf5
 time_begin: 200.
-
-# Backend of input scenario (hdf5 or mdsplus)
-scenario_backend: mdsplus
