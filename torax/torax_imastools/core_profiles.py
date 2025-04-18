@@ -16,14 +16,19 @@
 objects"""
 from typing import Any
 import numpy as np
+import datetime
+import jax
 try:
     import imaspy
     from imaspy.ids_toplevel import IDSToplevel
 except ImportError:
     IDSToplevel = Any
 from torax import state
+from torax import constants
 from torax.state import ToraxSimState
 from torax.torax_imastools.util import face_to_cell, requires_module
+
+_trapz = jax.scipy.integrate.trapezoid
 
 @requires_module("imaspy")
 def core_profiles_from_IMAS(
@@ -56,9 +61,9 @@ def core_profiles_from_IMAS(
       # Aimp_override = 1.0
 
     #profile_conditions
-    #Need to change again the sign of psi when we will work with DDv4. Should we shift it to get psi=0 at the center ?
+    # Should we shift it to get psi=0 at the center ?
     if not read_psi_from_geo:
-      psi = {t_initial: {rhon_array[0][rj]: -1 * (profiles_1d[0].grid.psi[rj]) for rj in range(len(rhon_array[0]))}} #To discuss either we provide it here or init it from geo
+      psi = {t_initial: {rhon_array[0][rj]: 1 * (profiles_1d[0].grid.psi[rj]) for rj in range(len(rhon_array[0]))}} #To discuss either we provide it here or init it from geo
     else:
        psi = None
     #Will be overwritten anyway if Ip_from_parameters = False, when Ip is given from the equilibrium (in most cases probably).
@@ -129,6 +134,7 @@ def core_profiles_to_IMAS(
     post_processed_outputs = state.post_processed_outputs
     ids.ids_properties.comment = "IDS built from TORAX sim output. Grid based on torax cell grid, used cell grid values and interpolated face grid values"
     ids.ids_properties.homogeneous_time = 1
+    ids.ids_properties.creation_date = datetime.date.today().isoformat()
     ids.time = [t]
     ids.code.name = "TORAX"
     ids.code.description = "TORAX is a differentiable tokamak core transport simulator aimed for fast and accurate forward modelling, pulse-design, trajectory optimization, and controller design workflows."
@@ -138,6 +144,7 @@ def core_profiles_to_IMAS(
     ids.global_quantities.ip.resize(1)
     ids.global_quantities.v_loop.resize(1)
     ids.global_quantities.li_3.resize(1)
+    ids.global_quantities.beta_pol.resize(1)
     ids.global_quantities.t_e_volume_average.resize(1)
     ids.global_quantities.n_e_volume_average.resize(1)
     ids.global_quantities.ion.resize(1) #Volume average Ti and ni only available for main ion (could be modified to define it for each of the main ions at least, and t_i_average for all ions, impurities included).
@@ -157,6 +164,9 @@ def core_profiles_to_IMAS(
     ids.global_quantities.current_bootstrap[0] = -1 * cp_state.currents.I_bootstrap
     ids.global_quantities.v_loop[0] = cp_state.vloop_lcfs
     ids.global_quantities.li_3[0] = post_processed_outputs.li3
+    ids.global_quantities.beta_pol[0] = _trapz(post_processed_outputs.pressure_thermal_tot_face * geometry.vpr_face, geometry.rho_face_norm) \
+      / (constants.CONSTANTS.mu0 * cp_state.currents.Ip_profile_face[-1]**2 * geometry.Rmaj) #Not sure of the formula. To be checked. Is the thermal pressure = to total perpendicular pressure ?
+    # Also Could be interesting to add beta_pol in post_processed_outputs ?
     ids.global_quantities.t_e_volume_average[0] = post_processed_outputs.te_volume_avg * 1e3
     ids.global_quantities.n_e_volume_average[0] = post_processed_outputs.ne_volume_avg * cp_state.nref
     ids.global_quantities.ion[0].t_i_volume_average[0] = post_processed_outputs.ti_volume_avg * 1e3
@@ -172,6 +182,8 @@ def core_profiles_to_IMAS(
 
     ids.profiles_1d[0].electrons.temperature = cp_state.temp_el.value * 1e3
     ids.profiles_1d[0].electrons.density = cp_state.ne.value * cp_state.nref
+    ids.profiles_1d[0].electrons.density_thermal = cp_state.ne.value * cp_state.nref
+    ids.profiles_1d[0].electrons.density_fast = np.zeros(len(geometry.rho_norm))
     ids.profiles_1d[0].electrons.pressure_thermal = face_to_cell(post_processed_outputs.pressure_thermal_el_face)
     ids.profiles_1d[0].pressure_ion_total = face_to_cell(post_processed_outputs.pressure_thermal_ion_face)
     ids.profiles_1d[0].pressure_thermal = face_to_cell(post_processed_outputs.pressure_thermal_tot_face)
@@ -184,6 +196,8 @@ def core_profiles_to_IMAS(
     ids.profiles_1d[0].ion[0].z_ion_1d = cp_state.Zi
     ids.profiles_1d[0].ion[0].temperature = cp_state.temp_ion.value * 1e3
     ids.profiles_1d[0].ion[0].density = cp_state.ni.value * cp_state.nref
+    ids.profiles_1d[0].ion[0].density_thermal = cp_state.ni.value * cp_state.nref
+    ids.profiles_1d[0].ion[0].density_fast = np.zeros(len(geometry.rho_norm))
     # assume no molecules, revisit later
     ids.profiles_1d[0].ion[0].element[0].a = cp_state.Ai
     ids.profiles_1d[0].ion[0].element[0].z_n = np.mean(cp_state.Zi) # This or read the data from IonMixture ?
@@ -192,6 +206,8 @@ def core_profiles_to_IMAS(
     ids.profiles_1d[0].ion[1].z_ion_1d = cp_state.Zimp
     ids.profiles_1d[0].ion[1].temperature = cp_state.temp_ion.value
     ids.profiles_1d[0].ion[1].density = cp_state.nimp.value * cp_state.nref
+    ids.profiles_1d[0].ion[1].density_thermal = cp_state.nimp.value * cp_state.nref
+    ids.profiles_1d[0].ion[1].density_fast = np.zeros(len(geometry.rho_norm))
     # assume no molecules, revisit later
     ids.profiles_1d[0].ion[1].element[0].a = cp_state.Aimp
     ids.profiles_1d[0].ion[1].element[0].z_n = np.mean(cp_state.Zimp) # This or read the data from IonMixture ?
