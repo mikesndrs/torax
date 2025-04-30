@@ -47,7 +47,7 @@ def prep_simulation(
         torax_config.sources.source_model_config
     )
 
-  stepper = torax_config.stepper.build_stepper(
+  solver = torax_config.stepper.build_solver(
       transport_model=transport_model,
       source_models=source_models,
       pedestal_model=pedestal_model,
@@ -55,13 +55,13 @@ def prep_simulation(
 
     mhd_models = torax_config.mhd.build_mhd_models()
 
-    step_fn = step_function.SimulationStepFn(
-        stepper=stepper,
-        time_step_calculator=torax_config.time_step_calculator.time_step_calculator,
-        transport_model=transport_model,
-        pedestal_model=pedestal_model,
-        mhd_models=mhd_models,
-    )
+  step_fn = step_function.SimulationStepFn(
+      stepper=solver,
+      time_step_calculator=torax_config.time_step_calculator.time_step_calculator,
+      transport_model=transport_model,
+      pedestal_model=pedestal_model,
+      mhd_models=mhd_models,
+  )
 
   static_runtime_params_slice = (
       build_runtime_params.build_static_params_from_config(torax_config)
