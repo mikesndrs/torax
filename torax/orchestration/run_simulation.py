@@ -47,7 +47,7 @@ def prep_simulation(
         torax_config.sources.source_model_config
     )
 
-  solver = torax_config.stepper.build_solver(
+  solver = torax_config.solver.build_solver(
       transport_model=transport_model,
       source_models=source_models,
       pedestal_model=pedestal_model,
