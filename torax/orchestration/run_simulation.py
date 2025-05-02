@@ -113,6 +113,5 @@ def prep_simulation(
       state_history=state_history,
       post_processed_outputs_history=post_processed_outputs_history,
       sim_error=sim_error,
-      source_models=source_models,
       torax_config=torax_config,
   )
