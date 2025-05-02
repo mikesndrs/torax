@@ -160,8 +160,6 @@ class StandardGeometryIntermediates:
       calculations. Used to create a higher-resolution grid to improve accuracy
       when initializing psi from a plasma current profile.
     z_magnetic_axis: z position of magnetic axis [:math:`\mathrm{m}`].
-    z_boundary_outline: z positions of boundary outline [:math:`\mathrm{m}`].
-    r_boundary_outline: r positions of boundary outline [:math:`\mathrm{m}`].
   """
 
   geometry_type: geometry.GeometryType
@@ -187,8 +185,6 @@ class StandardGeometryIntermediates:
   n_rho: int
   hires_fac: int
   z_magnetic_axis: chex.Numeric | None
-  z_boundary_outline: chex.Array | None
-  r_boundary_outline: chex.Array | None
 
   def __post_init__(self):
     """Extrapolates edge values and smooths near-axis values.
@@ -350,8 +346,6 @@ class StandardGeometryIntermediates:
         n_rho=n_rho,
         hires_fac=hires_fac,
         z_magnetic_axis=None,
-        z_boundary_outline=None,
-        r_boundary_outline=None,
     )
 
   @classmethod
@@ -598,8 +592,6 @@ class StandardGeometryIntermediates:
         n_rho=n_rho,
         hires_fac=hires_fac,
         z_magnetic_axis=LY['zA'],
-        z_boundary_outline=None,
-        r_boundary_outline=None,
     )
 
   @classmethod
@@ -913,8 +905,6 @@ class StandardGeometryIntermediates:
         n_rho=n_rho,
         hires_fac=hires_fac,
         z_magnetic_axis=Zaxis,
-        z_boundary_outline=None,
-        r_boundary_outline=None,
     )
 
   @classmethod
@@ -1178,8 +1168,6 @@ def build_standard_geometry(
       # geo_t_plus_dt for each given time interval.
       Phibdot=np.asarray(0.0),
       _z_magnetic_axis=intermediate.z_magnetic_axis,
-      _z_boundary_outline=intermediate.z_boundary_outline,
-      _r_boundary_outline=intermediate.r_boundary_outline,
   )
 
 
