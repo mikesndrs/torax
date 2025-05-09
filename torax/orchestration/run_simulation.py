@@ -42,10 +42,10 @@ def prep_simulation(
     transport_model = torax_config.transport.build_transport_model()
     pedestal_model = torax_config.pedestal.build_pedestal_model()
 
-    geometry_provider = torax_config.geometry.build_provider
-    source_models = source_models_lib.SourceModels(
-        torax_config.sources.source_model_config
-    )
+  geometry_provider = torax_config.geometry.build_provider
+  source_models = source_models_lib.SourceModels(
+      torax_config.sources
+  )
 
   solver = torax_config.solver.build_solver(
       transport_model=transport_model,
