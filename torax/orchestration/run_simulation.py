@@ -45,7 +45,7 @@ def prep_simulation(
 
   geometry_provider = torax_config.geometry.build_provider
   source_models = source_models_lib.SourceModels(
-      torax_config.sources
+      torax_config.sources, neoclassical=torax_config.neoclassical
   )
 
   static_runtime_params_slice = (
