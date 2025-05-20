@@ -13,33 +13,59 @@
 # limitations under the License.
 
 """Numerics parameters used throughout TORAX simulations."""
+
+import dataclasses
+import functools
+
 import chex
+import jax
 import pydantic
 from torax._src import array_typing
-from torax._src import constants
 from torax._src.torax_pydantic import torax_pydantic
 from typing_extensions import Self
 
 
 # pylint: disable=invalid-name
 # TODO(b/326578331): remove density reference from DynamicNumerics entirely.
-@chex.dataclass
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
 class DynamicNumerics:
-  """Generic numeric parameters for the simulation."""
+  """Generic numeric parameters for the simulation.
+
+  For definitions see `Numerics`.
+  """
 
   t_initial: float
   t_final: float
-  exact_t_final: bool
   max_dt: float
   min_dt: float
   chi_timestep_prefactor: float
   fixed_dt: float
   dt_reduction_factor: float
   resistivity_multiplier: array_typing.ScalarFloat
-  density_reference: float
   adaptive_T_source_prefactor: float
   adaptive_n_source_prefactor: float
-  calcphibdot: bool
+  evolve_ion_heat: bool = dataclasses.field(metadata={'static': True})
+  evolve_electron_heat: bool = dataclasses.field(metadata={'static': True})
+  evolve_current: bool = dataclasses.field(metadata={'static': True})
+  evolve_density: bool = dataclasses.field(metadata={'static': True})
+  exact_t_final: bool = dataclasses.field(metadata={'static': True})
+  adaptive_dt: bool = dataclasses.field(metadata={'static': True})
+  calcphibdot: bool = dataclasses.field(metadata={'static': True})
+
+  @functools.cached_property
+  def evolving_names(self) -> tuple[str, ...]:
+    """The names of core_profiles variables that are evolved by the solver."""
+    evolving_names = []
+    if self.evolve_ion_heat:
+      evolving_names.append('T_i')
+    if self.evolve_electron_heat:
+      evolving_names.append('T_e')
+    if self.evolve_current:
+      evolving_names.append('psi')
+    if self.evolve_density:
+      evolving_names.append('n_e')
+    return tuple(evolving_names)
 
 
 class Numerics(torax_pydantic.BaseModelFrozen):
@@ -76,7 +102,6 @@ class Numerics(torax_pydantic.BaseModelFrozen):
     resistivity_multiplier:  1/multiplication factor for sigma (conductivity) to
       reduce current diffusion timescale to be closer to heat diffusion
       timescale
-    density_reference: Reference density value for normalizations.
     adaptive_T_source_prefactor: Prefactor for adaptive source term for setting
       temperature internal boundary conditions.
     adaptive_n_source_prefactor: Prefactor for adaptive source term for setting
@@ -118,23 +143,41 @@ class Numerics(torax_pydantic.BaseModelFrozen):
       )
     return self
 
+  @property
+  def evolving_names(self) -> tuple[str, ...]:
+    """The names of core_profiles variables that are evolved by the solver."""
+    evolving_names = []
+    if self.evolve_ion_heat:
+      evolving_names.append('T_i')
+    if self.evolve_electron_heat:
+      evolving_names.append('T_e')
+    if self.evolve_current:
+      evolving_names.append('psi')
+    if self.evolve_density:
+      evolving_names.append('n_e')
+    return tuple(evolving_names)
+
   def build_dynamic_params(
       self,
       t: chex.Numeric,
   ) -> DynamicNumerics:
-    """Builds a DynamicNumerics."""
+    """Builds a DynamicNumerics object for time t."""
     return DynamicNumerics(
         t_initial=self.t_initial,
         t_final=self.t_final,
-        exact_t_final=self.exact_t_final,
         max_dt=self.max_dt,
         min_dt=self.min_dt,
         chi_timestep_prefactor=self.chi_timestep_prefactor,
         fixed_dt=self.fixed_dt,
         dt_reduction_factor=self.dt_reduction_factor,
-        calcphibdot=self.calcphibdot,
         resistivity_multiplier=self.resistivity_multiplier.get_value(t),
-        density_reference=constants.DENSITY_SCALING_FACTOR,
         adaptive_T_source_prefactor=self.adaptive_T_source_prefactor,
         adaptive_n_source_prefactor=self.adaptive_n_source_prefactor,
+        evolve_ion_heat=self.evolve_ion_heat,
+        evolve_electron_heat=self.evolve_electron_heat,
+        evolve_current=self.evolve_current,
+        evolve_density=self.evolve_density,
+        exact_t_final=self.exact_t_final,
+        adaptive_dt=self.adaptive_dt,
+        calcphibdot=self.calcphibdot,
     )

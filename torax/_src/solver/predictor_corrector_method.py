@@ -18,17 +18,28 @@ Picard iterations to approximate the nonlinear solution. If
 static_runtime_params_slice.solver.use_predictor_corrector is False, reverts to
 a standard linear solution.
 """
+import functools
+
 import jax
 from torax._src import jax_utils
 from torax._src import state
+from torax._src import xnp
 from torax._src.config import runtime_params_slice
 from torax._src.fvm import block_1d_coeffs
 from torax._src.fvm import calc_coeffs
 from torax._src.fvm import cell_variable
 from torax._src.fvm import implicit_solve_block
 from torax._src.geometry import geometry
+from torax._src.sources import source_profiles
 
 
+@functools.partial(
+    xnp.jit,
+    static_argnames=[
+        'static_runtime_params_slice',
+        'coeffs_callback',
+    ],
+)
 def predictor_corrector_method(
     dt: jax.Array,
     static_runtime_params_slice: runtime_params_slice.StaticRuntimeParamsSlice,
@@ -38,6 +49,7 @@ def predictor_corrector_method(
     x_new_guess: tuple[cell_variable.CellVariable, ...],
     core_profiles_t_plus_dt: state.CoreProfiles,
     coeffs_exp: block_1d_coeffs.Block1DCoeffs,
+    explicit_source_profiles: source_profiles.SourceProfiles,
     coeffs_callback: calc_coeffs.CoeffsCallback,
 ) -> tuple[cell_variable.CellVariable, ...]:
   """Predictor-corrector method.
@@ -55,8 +67,14 @@ def predictor_corrector_method(
     x_new_guess: Tuple of CellVariables corresponding to the initial guess for
       the next time step.
     core_profiles_t_plus_dt: Core profiles at the next time step.
-    coeffs_exp: Block1DCoeffs PDE coefficients at beginning of timestep
-    coeffs_callback: coefficient callback function
+    coeffs_exp: Block1DCoeffs PDE coefficients at beginning of timestep.
+    explicit_source_profiles: Precomputed explicit source profiles. These
+        profiles were configured to always depend on state and parameters at
+        time t during the solver step. They can thus be inputs, since they are
+        not recalculated at time t+plus_dt with updated state during the solver
+        iterations. For sources that are implicit, their explicit profiles are
+        set to all zeros.
+    coeffs_callback: coefficient callback function.
 
   Returns:
     x_new: Solution of evolving core profile state variables
@@ -70,6 +88,7 @@ def predictor_corrector_method(
         geo_t_plus_dt,
         core_profiles_t_plus_dt,
         x_new_guess,
+        explicit_source_profiles=explicit_source_profiles,
         allow_pereverzev=True,
     )
 
@@ -88,13 +107,8 @@ def predictor_corrector_method(
         ),
     )
 
-  # jax.lax.fori_loop jits the function by default. Need to explicitly avoid
-  # compilation and revert to a standard for loop if
-  # TORAX_COMPILATION_ENABLED=False. This logic is in jax.utils_py_fori_loop.
-  # If the static use_predictor_corrector=False, then compilation is faster, so
-  # we maintain this option.
   if static_runtime_params_slice.solver.use_predictor_corrector:
-    x_new = jax_utils.py_fori_loop(
+    x_new = xnp.fori_loop(
         0,
         dynamic_runtime_params_slice_t_plus_dt.solver.n_corrector_steps + 1,
         loop_body,

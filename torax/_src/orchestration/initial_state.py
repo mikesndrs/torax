@@ -15,7 +15,7 @@
 import dataclasses
 
 from absl import logging
-import jax.numpy as jnp
+import numpy as np
 from torax._src import state
 from torax._src.config import build_runtime_params
 from torax._src.config import runtime_params_slice
@@ -67,11 +67,13 @@ def _get_initial_state(
     step_fn: step_function.SimulationStepFn,
 ) -> sim_state.ToraxSimState:
   """Returns the initial state to be used by run_simulation()."""
+  physics_models = step_fn.solver.physics_models
   initial_core_profiles = initialization.initial_core_profiles(
       static_runtime_params_slice,
       dynamic_runtime_params_slice,
       geo,
-      step_fn.solver.source_models,
+      source_models=physics_models.source_models,
+      neoclassical_models=physics_models.neoclassical_models,
   )
   # Populate the starting state with source profiles from the implicit sources
   # before starting the run-loop. The explicit source profiles will be computed
@@ -81,19 +83,20 @@ def _get_initial_state(
       dynamic_runtime_params_slice=dynamic_runtime_params_slice,
       geo=geo,
       core_profiles=initial_core_profiles,
-      source_models=step_fn.solver.source_models,
+      source_models=physics_models.source_models,
+      neoclassical_models=physics_models.neoclassical_models,
       conductivity=conductivity_base.Conductivity(
           sigma=initial_core_profiles.sigma,
-          sigma_face=initial_core_profiles.sigma_face),
+          sigma_face=initial_core_profiles.sigma_face,
+      ),
   )
 
   return sim_state.ToraxSimState(
-      t=jnp.array(dynamic_runtime_params_slice.numerics.t_initial),
-      dt=jnp.zeros(()),
+      t=np.array(dynamic_runtime_params_slice.numerics.t_initial),
+      dt=np.zeros(()),
       core_profiles=initial_core_profiles,
-      # This will be overridden within run_simulation().
       core_sources=initial_core_sources,
-      core_transport=state.CoreTransport.zeros(geo),
+      core_transport=transport_coeffs,
       solver_numeric_outputs=state.SolverNumericOutputs(
           solver_error_state=0,
           outer_solver_iterations=0,
@@ -164,7 +167,7 @@ def get_initial_state_and_post_processed_outputs_from_file(
   )
   core_profiles = dataclasses.replace(
       initial_state.core_profiles,
-      vloop_lcfs=scalars_dataset.vloop_lcfs.values,
+      v_loop_lcfs=scalars_dataset.v_loop_lcfs.values,
   )
   numerics_dataset = data_tree.children[output.NUMERICS].dataset
   numerics_dataset = numerics_dataset.squeeze()
@@ -203,9 +206,9 @@ def _override_initial_runtime_params_from_file(
   """Override parts of runtime params slice from state in a file."""
   # pylint: disable=invalid-name
   dynamic_runtime_params_slice.numerics.t_initial = t_restart
-  dynamic_runtime_params_slice.profile_conditions.Ip = (
-      profiles_ds.data_vars[output.IP_PROFILE].to_numpy()[-1]
-  )
+  dynamic_runtime_params_slice.profile_conditions.Ip = profiles_ds.data_vars[
+      output.IP_PROFILE
+  ].to_numpy()[-1]
   dynamic_runtime_params_slice.profile_conditions.T_e = (
       profiles_ds.data_vars[output.T_E]
       .sel(rho_norm=profiles_ds.coords[output.RHO_CELL_NORM])

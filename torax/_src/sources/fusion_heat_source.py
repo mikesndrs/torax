@@ -31,7 +31,6 @@ from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import source
 from torax._src.sources import source_profiles
 
-
 # Default value for the model function to be used for the fusion heat
 # source. This is also used as an identifier for the model function in
 # the default source config for Pydantic to "discriminate" against.
@@ -51,8 +50,8 @@ def calc_fusion(
     core_profiles: Core plasma profiles.
     static_runtime_params_slice: Static runtime params, used to determine the
       existence of deuterium and tritium.
-    dynamic_runtime_params_slice: Dynamic runtime params, used to extract
-      density_reference and the D and T densities.
+    dynamic_runtime_params_slice: Dynamic runtime params, used to extract the
+      D and T densities.
 
   Returns:
     Tuple of P_total, Pfus_i, Pfus_e: total fusion power in MW, ion and electron
@@ -115,7 +114,6 @@ def calc_fusion(
       jnp.log(DT_fraction_product * Efus)
       + 2 * jnp.log(core_profiles.n_i.face_value())
       + logsigmav
-      + 2 * jnp.log(dynamic_runtime_params_slice.numerics.density_reference)
   )
 
   # [W/m^3]

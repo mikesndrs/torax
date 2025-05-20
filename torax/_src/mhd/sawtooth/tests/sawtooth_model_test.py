@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import dataclasses
+
 from absl.testing import absltest
 from absl.testing import parameterized
 import jax
@@ -22,7 +23,6 @@ from torax._src import state
 from torax._src.config import build_runtime_params
 from torax._src.orchestration import initial_state as initial_state_lib
 from torax._src.orchestration import step_function
-from torax._src.sources import source_models as source_models_lib
 from torax._src.torax_pydantic import model_config
 
 _NRHO = 10
@@ -90,34 +90,16 @@ class SawtoothModelTest(parameterized.TestCase):
         build_runtime_params.build_static_params_from_config(torax_config)
     )
 
-    transport_model = torax_config.transport.build_transport_model()
-    pedestal_model = torax_config.pedestal.build_pedestal_model()
-
-    source_models = source_models_lib.SourceModels(
-        torax_config.sources, torax_config.neoclassical
-    )
-
     solver = torax_config.solver.build_solver(
         static_runtime_params_slice=static_runtime_params_slice,
-        transport_model=transport_model,
-        source_models=source_models,
-        pedestal_model=pedestal_model,
+        physics_models=torax_config.build_physics_models(),
     )
 
-    mhd_models = torax_config.mhd.build_mhd_models(
-        static_runtime_params_slice=static_runtime_params_slice,
-        transport_model=transport_model,
-        pedestal_model=pedestal_model,
-        source_models=source_models,
-    )
-
-    self.geometry_provider = torax_config.geometry.build_provider
-
-    self.static_runtime_params_slice = (
+    geometry_provider = torax_config.geometry.build_provider
+    static_runtime_params_slice = (
         build_runtime_params.build_static_params_from_config(torax_config)
     )
-
-    self.dynamic_runtime_params_slice_provider = (
+    dynamic_runtime_params_slice_provider = (
         build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
             torax_config
         )
@@ -126,17 +108,17 @@ class SawtoothModelTest(parameterized.TestCase):
     self.step_fn = step_function.SimulationStepFn(
         solver=solver,
         time_step_calculator=torax_config.time_step_calculator.time_step_calculator,
-        transport_model=transport_model,
-        pedestal_model=pedestal_model,
-        mhd_models=mhd_models,
+        static_runtime_params_slice=static_runtime_params_slice,
+        geometry_provider=geometry_provider,
+        dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
     )
 
     self.initial_state, self.initial_post_processed_outputs = (
         initial_state_lib.get_initial_state_and_post_processed_outputs(
             t=torax_config.numerics.t_initial,
-            static_runtime_params_slice=self.static_runtime_params_slice,
-            dynamic_runtime_params_slice_provider=self.dynamic_runtime_params_slice_provider,
-            geometry_provider=self.geometry_provider,
+            static_runtime_params_slice=static_runtime_params_slice,
+            dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
+            geometry_provider=geometry_provider,
             step_fn=self.step_fn,
         )
     )
@@ -144,9 +126,6 @@ class SawtoothModelTest(parameterized.TestCase):
   def test_sawtooth_crash(self):
     """Tests that default values lead to crash and compares post-crash to ref."""
     output_state, _, sim_error = self.step_fn(
-        static_runtime_params_slice=self.static_runtime_params_slice,
-        dynamic_runtime_params_slice_provider=self.dynamic_runtime_params_slice_provider,
-        geometry_provider=self.geometry_provider,
         input_state=self.initial_state,
         previous_post_processed_outputs=self.initial_post_processed_outputs,
     )
@@ -156,7 +135,7 @@ class SawtoothModelTest(parameterized.TestCase):
         output_state.solver_numeric_outputs.sawtooth_crash, np.array(True)
     )
     np.testing.assert_equal(output_state.dt, np.array(_CRASH_STEP_DURATION))
-    np.testing.assert_equal(
+    np.testing.assert_array_equal(
         output_state.t, self.initial_state.t + np.array(_CRASH_STEP_DURATION)
     )
 
@@ -182,9 +161,6 @@ class SawtoothModelTest(parameterized.TestCase):
         ),
     )
     output_state, _, sim_error = self.step_fn(
-        static_runtime_params_slice=self.static_runtime_params_slice,
-        dynamic_runtime_params_slice_provider=self.dynamic_runtime_params_slice_provider,
-        geometry_provider=self.geometry_provider,
         input_state=initial_state,
         previous_post_processed_outputs=self.initial_post_processed_outputs,
     )
@@ -194,16 +170,13 @@ class SawtoothModelTest(parameterized.TestCase):
     )
     np.testing.assert_equal(output_state.dt, np.array(_FIXED_DT))
     np.testing.assert_equal(
-        output_state.t, self.initial_state.t + np.array(_FIXED_DT)
+        output_state.t, np.array(self.initial_state.t + _FIXED_DT)
     )
 
   def test_no_subsequent_sawtooth_crashes(self):
     """Tests for no subsequent sawtooth crashes even if q in trigger condition."""
     # This crashes
     output_state0, post_processed_outputs0, _ = self.step_fn(
-        static_runtime_params_slice=self.static_runtime_params_slice,
-        dynamic_runtime_params_slice_provider=self.dynamic_runtime_params_slice_provider,
-        geometry_provider=self.geometry_provider,
         input_state=self.initial_state,
         previous_post_processed_outputs=self.initial_post_processed_outputs,
     )
@@ -230,9 +203,6 @@ class SawtoothModelTest(parameterized.TestCase):
 
     with self.subTest('no_subsequent_sawtooth_crashes'):
       output_state_should_not_crash, _, sim_error = self.step_fn(
-          static_runtime_params_slice=self.static_runtime_params_slice,
-          dynamic_runtime_params_slice_provider=self.dynamic_runtime_params_slice_provider,
-          geometry_provider=self.geometry_provider,
           input_state=new_input_state_should_not_crash,
           previous_post_processed_outputs=post_processed_outputs0,
       )
@@ -244,16 +214,13 @@ class SawtoothModelTest(parameterized.TestCase):
       np.testing.assert_equal(
           output_state_should_not_crash.dt, np.array(_FIXED_DT)
       )
-      np.testing.assert_equal(
+      np.testing.assert_array_equal(
           output_state_should_not_crash.t,
           self.initial_state.t + np.array(_CRASH_STEP_DURATION + _FIXED_DT),
       )
 
     with self.subTest('crashes_if_sawtooth_crash_is_false'):
       output_state_should_crash, _, sim_error = self.step_fn(
-          static_runtime_params_slice=self.static_runtime_params_slice,
-          dynamic_runtime_params_slice_provider=self.dynamic_runtime_params_slice_provider,
-          geometry_provider=self.geometry_provider,
           input_state=new_input_state_should_crash,
           previous_post_processed_outputs=post_processed_outputs0,
       )
@@ -265,7 +232,7 @@ class SawtoothModelTest(parameterized.TestCase):
       np.testing.assert_equal(
           output_state_should_crash.dt, np.array(_CRASH_STEP_DURATION)
       )
-      np.testing.assert_equal(
+      np.testing.assert_array_equal(
           output_state_should_crash.t,
           self.initial_state.t + np.array(2 * _CRASH_STEP_DURATION),
       )
@@ -285,16 +252,16 @@ _POST_CRASH_TEMPERATURE = np.array([
 ])
 
 _POST_CRASH_N = np.array([
-    0.92905438,
-    0.92652621,
-    0.92399804,
-    0.92146987,
-    0.91894169,
-    0.88178024,
-    0.8345057,
-    0.79219014,
-    0.75698169,
-    0.72177324,
+    0.92905438e20,
+    0.92652621e20,
+    0.92399804e20,
+    0.92146987e20,
+    0.91894169e20,
+    0.88178024e20,
+    0.8345057e20,
+    0.79219014e20,
+    0.75698169e20,
+    0.72177324e20,
 ])
 
 _POST_CRASH_PSI = np.array([

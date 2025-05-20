@@ -22,9 +22,7 @@ calculations specific to plasma physics to provide these coefficients.
 
 from typing import Any, Optional, TypeAlias
 
-import chex
 import jax
-
 
 # An optional argument, consisting of a 2D matrix of nested tuples, with each
 # leaf being either None or a JAX Array. Used to define block matrices.
@@ -42,7 +40,8 @@ OptionalTupleMatrix: TypeAlias = Optional[
 AuxiliaryOutput: TypeAlias = Any
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class Block1DCoeffs:
   # pyformat: disable  # pyformat removes line breaks needed for readability
   """The coefficients of coupled 1D fluid dynamics PDEs.

@@ -14,34 +14,39 @@
 
 """The NonLinearThetaMethod class."""
 import abc
+import dataclasses
 
-import chex
 import jax
 from torax._src import state
 from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import convertors
 from torax._src.fvm import calc_coeffs
 from torax._src.fvm import cell_variable
 from torax._src.fvm import enums
 from torax._src.fvm import newton_raphson_solve_block
 from torax._src.fvm import optimizer_solve_block
 from torax._src.geometry import geometry
-from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.solver import runtime_params
 from torax._src.solver import solver
 from torax._src.sources import source_profiles
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicOptimizerRuntimeParams(runtime_params.DynamicRuntimeParams):
-  initial_guess_mode: int
   n_max_iterations: int
   loss_tol: float
 
 
-@chex.dataclass(frozen=True)
-class DynamicNewtonRaphsonRuntimeParams(runtime_params.DynamicRuntimeParams):
-  log_iterations: bool
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class StaticOptimizerRuntimeParams(runtime_params.StaticRuntimeParams):
   initial_guess_mode: int
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+class DynamicNewtonRaphsonRuntimeParams(runtime_params.DynamicRuntimeParams):
   maxiter: int
   residual_tol: float
   residual_coarse_tol: float
@@ -49,18 +54,14 @@ class DynamicNewtonRaphsonRuntimeParams(runtime_params.DynamicRuntimeParams):
   tau_min: float
 
 
-class NonlinearThetaMethod(solver.Solver):
-  """Time step update using theta method.
+@chex.dataclass(frozen=True)
+class StaticNewtonRaphsonRuntimeParams(runtime_params.StaticRuntimeParams):
+  initial_guess_mode: int
+  log_iterations: bool
 
-  Attributes:
-    transport_model: A TransportModel subclass, calculates transport coeffs.
-    source_models: All TORAX sources used to compute both the explicit and
-      implicit source profiles used for each time step as terms in the state
-      evolution equations. Though the explicit profiles are computed outside the
-      call to Solver, the same sources should be used to compute those. The
-      Sources are exposed here to provide a single source of truth for which
-      sources are used during a run.
-  """
+
+class NonlinearThetaMethod(solver.Solver):
+  """Time step update using nonlinear solvers and the theta method."""
 
   def _x_new(
       self,
@@ -72,35 +73,21 @@ class NonlinearThetaMethod(solver.Solver):
       geo_t_plus_dt: geometry.Geometry,
       core_profiles_t: state.CoreProfiles,
       core_profiles_t_plus_dt: state.CoreProfiles,
-      core_sources_t: source_profiles.SourceProfiles,
-      core_transport_t: state.CoreTransport,
       explicit_source_profiles: source_profiles.SourceProfiles,
       evolving_names: tuple[str, ...],
   ) -> tuple[
       tuple[cell_variable.CellVariable, ...],
-      source_profiles.SourceProfiles,
-      conductivity_base.Conductivity,
-      state.CoreTransport,
       state.SolverNumericOutputs,
   ]:
     """See Solver._x_new docstring."""
 
-    # Not used in this implementation.
-    del core_sources_t, core_transport_t
-
     coeffs_callback = calc_coeffs.CoeffsCallback(
         static_runtime_params_slice=static_runtime_params_slice,
-        transport_model=self.transport_model,
-        explicit_source_profiles=explicit_source_profiles,
-        source_models=self.source_models,
-        pedestal_model=self.pedestal_model,
+        physics_models=self.physics_models,
         evolving_names=evolving_names,
     )
     (
         x_new,
-        core_sources,
-        core_conductivity,
-        core_transport,
         solver_numeric_outputs,
     ) = self._x_new_helper(
         dt=dt,
@@ -118,9 +105,6 @@ class NonlinearThetaMethod(solver.Solver):
 
     return (
         x_new,
-        core_sources,
-        core_conductivity,
-        core_transport,
         solver_numeric_outputs,
     )
 
@@ -140,25 +124,48 @@ class NonlinearThetaMethod(solver.Solver):
       evolving_names: tuple[str, ...],
   ) -> tuple[
       tuple[cell_variable.CellVariable, ...],
-      source_profiles.SourceProfiles,
-      conductivity_base.Conductivity,
-      state.CoreTransport,
       state.SolverNumericOutputs,
   ]:
-    """Final implementation of x_new after callback has been created etc."""
+    """Abstract method for subclasses to implement the specific nonlinear solve.
+
+    This helper method is called by `_x_new` after it has constructed the
+    `coeffs_callback`. Subclasses should implement this method to call their
+    respective nonlinear solver implementation (e.g., Newton-Raphson or an
+    optimizer-based approach).
+
+    Args:
+      dt: Time step duration.
+      static_runtime_params_slice: Static runtime parameters. Changes to these
+        runtime params will trigger recompilation.
+      dynamic_runtime_params_slice_t: Runtime parameters for time t (the start
+        time of the step).
+      dynamic_runtime_params_slice_t_plus_dt: Runtime parameters for time t +
+        dt, used for implicit calculations in the solver.
+      geo_t: Magnetic geometry at time t.
+      geo_t_plus_dt: Magnetic geometry at time t + dt.
+      core_profiles_t: Core plasma profiles at the beginning of the time step.
+      core_profiles_t_plus_dt: Core plasma profiles which contain all available
+        prescribed quantities at the end of the time step. This includes
+        evolving boundary conditions and prescribed time-dependent profiles that
+        are not being evolved by the PDE system.
+      explicit_source_profiles: Pre-calculated sources implemented as explicit
+        sources in the PDE.
+      coeffs_callback: Calculates diffusion, convection etc. coefficients given
+        a core_profiles, geometry, dynamic_runtime_params. Repeatedly called by
+        the iterative solvers.
+      evolving_names: The names of variables within the core profiles that
+        should evolve.
+
+    Returns:
+      A tuple containing:
+        - The new values of the evolving variables at time t + dt.
+        - Solver iteration and error info.
+    """
     ...
 
 
 class OptimizerThetaMethod(NonlinearThetaMethod):
-  """Minimize the squared norm of the residual of the theta method equation.
-
-  Attributes:
-    transport_model: A TransportModel subclass, calculates transport coeffs.
-    callback_class: Which class should be used to calculate the coefficients.
-    initial_guess_mode: Passed through to `fvm.optimizer_solve_block`.
-    maxiter: Passed through to `jaxopt.LBFGS`.
-    tol: Passed through to `jaxopt.LBFGS`.
-  """
+  """Minimize the squared norm of the residual of the theta method equation."""
 
   def _x_new_helper(
       self,
@@ -175,19 +182,16 @@ class OptimizerThetaMethod(NonlinearThetaMethod):
       evolving_names: tuple[str, ...],
   ) -> tuple[
       tuple[cell_variable.CellVariable, ...],
-      source_profiles.SourceProfiles,
-      conductivity_base.Conductivity,
-      state.CoreTransport,
       state.SolverNumericOutputs,
   ]:
-    """Final implementation of x_new after callback has been created etc."""
+    """See abstract method docstring in NonlinearThetaMethod."""
     solver_params = dynamic_runtime_params_slice_t.solver
     assert isinstance(solver_params, DynamicOptimizerRuntimeParams)
-    # Unpack the outputs of the optimizer_solve_block.
+    static_solver_params = static_runtime_params_slice.solver
+    assert isinstance(static_solver_params, StaticOptimizerRuntimeParams)
     (
         x_new,
         solver_numeric_outputs,
-        (core_sources, core_conductivity, core_transport),
     ) = optimizer_solve_block.optimizer_solve_block(
         dt=dt,
         static_runtime_params_slice=static_runtime_params_slice,
@@ -195,37 +199,29 @@ class OptimizerThetaMethod(NonlinearThetaMethod):
         dynamic_runtime_params_slice_t_plus_dt=dynamic_runtime_params_slice_t_plus_dt,
         geo_t=geo_t,
         geo_t_plus_dt=geo_t_plus_dt,
-        x_old=tuple([core_profiles_t[name] for name in evolving_names]),
+        x_old=convertors.core_profiles_to_solver_x_tuple(
+            core_profiles_t, evolving_names
+        ),
         core_profiles_t=core_profiles_t,
         core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-        transport_model=self.transport_model,
+        physics_models=self.physics_models,
         explicit_source_profiles=explicit_source_profiles,
-        source_models=self.source_models,
-        pedestal_model=self.pedestal_model,
         coeffs_callback=coeffs_callback,
         evolving_names=evolving_names,
         initial_guess_mode=enums.InitialGuessMode(
-            solver_params.initial_guess_mode,
+            static_solver_params.initial_guess_mode,
         ),
         maxiter=solver_params.n_max_iterations,
         tol=solver_params.loss_tol,
     )
     return (
         x_new,
-        core_sources,
-        core_conductivity,
-        core_transport,
         solver_numeric_outputs,
     )
 
 
 class NewtonRaphsonThetaMethod(NonlinearThetaMethod):
-  """Nonlinear theta method using Newton Raphson.
-
-  Attributes:
-    transport_model: A TransportModel subclass, calculates transport coeffs.
-    callback_class: Which class should be used to calculate the coefficients.
-  """
+  """Nonlinear theta method using Newton Raphson."""
 
   def _x_new_helper(
       self,
@@ -242,22 +238,17 @@ class NewtonRaphsonThetaMethod(NonlinearThetaMethod):
       evolving_names: tuple[str, ...],
   ) -> tuple[
       tuple[cell_variable.CellVariable, ...],
-      source_profiles.SourceProfiles,
-      conductivity_base.Conductivity,
-      state.CoreTransport,
       state.SolverNumericOutputs,
   ]:
-    """Final implementation of x_new after callback has been created etc."""
+    """See abstract method docstring in NonlinearThetaMethod."""
     solver_params = dynamic_runtime_params_slice_t.solver
     assert isinstance(solver_params, DynamicNewtonRaphsonRuntimeParams)
-    # disable error checking in residual, since Newton-Raphson routine has
-    # error checking based on result of each linear step
+    static_solver_params = static_runtime_params_slice.solver
+    assert isinstance(static_solver_params, StaticNewtonRaphsonRuntimeParams)
 
-    # Unpack the outputs of the newton_raphson_solve_block.
     (
         x_new,
         solver_numeric_outputs,
-        (core_sources, core_conductivity, core_transport),
     ) = newton_raphson_solve_block.newton_raphson_solve_block(
         dt=dt,
         static_runtime_params_slice=static_runtime_params_slice,
@@ -265,18 +256,18 @@ class NewtonRaphsonThetaMethod(NonlinearThetaMethod):
         dynamic_runtime_params_slice_t_plus_dt=dynamic_runtime_params_slice_t_plus_dt,
         geo_t=geo_t,
         geo_t_plus_dt=geo_t_plus_dt,
-        x_old=tuple([core_profiles_t[name] for name in evolving_names]),
+        x_old=convertors.core_profiles_to_solver_x_tuple(
+            core_profiles_t, evolving_names
+        ),
         core_profiles_t=core_profiles_t,
         core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-        transport_model=self.transport_model,
-        pedestal_model=self.pedestal_model,
         explicit_source_profiles=explicit_source_profiles,
-        source_models=self.source_models,
+        physics_models=self.physics_models,
         coeffs_callback=coeffs_callback,
         evolving_names=evolving_names,
-        log_iterations=solver_params.log_iterations,
+        log_iterations=static_solver_params.log_iterations,
         initial_guess_mode=enums.InitialGuessMode(
-            solver_params.initial_guess_mode
+            static_solver_params.initial_guess_mode
         ),
         maxiter=solver_params.maxiter,
         tol=solver_params.residual_tol,
@@ -286,8 +277,5 @@ class NewtonRaphsonThetaMethod(NonlinearThetaMethod):
     )
     return (
         x_new,
-        core_sources,
-        core_conductivity,
-        core_transport,
         solver_numeric_outputs,
     )

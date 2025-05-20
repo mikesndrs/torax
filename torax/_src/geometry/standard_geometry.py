@@ -18,28 +18,32 @@ This is a geometry object that is used for most geometries sources
 CHEASE, FBT, etc.
 """
 
+from collections.abc import Mapping
 import dataclasses
 import logging
-from collections.abc import Mapping
-from typing import Any
+from typing import Any, Optional
 
 import chex
 import contourpy
+from imas.ids_toplevel import IDSToplevel
 import numpy as np
 import scipy
-import typing_extensions
-
-from torax._src import constants, interpolated_param
-from torax._src.geometry import geometry, geometry_loader, geometry_provider
+from torax._src import constants
+from torax._src import interpolated_param
+from torax._src.geometry import geometry
+from torax._src.geometry import geometry_loader
+from torax._src.geometry import geometry_provider
 from torax._src.torax_pydantic import torax_pydantic
-from torax.imas_tools.equilibrium as imas_equilibrium
+from torax.imas_tools import equilibrium as imas_equilibrium
+import typing_extensions
 
 # pylint: disable=invalid-name
 
 _RHO_SMOOTHING_LIMIT = 0.1
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class StandardGeometry(geometry.Geometry):
   r"""Standard geometry object including additional useful attributes, like psi.
 
@@ -50,7 +54,8 @@ class StandardGeometry(geometry.Geometry):
   Attributes:
     Ip_from_parameters: Boolean indicating whether the total plasma current
       (`Ip`) is determined by the config parameters (True) or read from the
-      geometry file (False).
+      geometry file (False). This field is marked as static and will retrigger
+      compilation if changed.
     Ip_profile_face: Plasma current profile on the face grid
       [:math:`\mathrm{A}`].
     psi: 1D poloidal flux profile on the cell grid [:math:`\mathrm{Wb}`].
@@ -68,7 +73,7 @@ class StandardGeometry(geometry.Geometry):
       `Geometry` docstring for definition of `delta_lower_face`.
   """
 
-  Ip_from_parameters: bool
+  Ip_from_parameters: bool = dataclasses.field(metadata=dict(static=True))
   Ip_profile_face: chex.Array
   psi: chex.Array
   psi_from_Ip: chex.Array
@@ -79,11 +84,12 @@ class StandardGeometry(geometry.Geometry):
   delta_lower_face: chex.Array
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class StandardGeometryProvider(geometry_provider.TimeDependentGeometryProvider):
   """Values to be interpolated for a Standard Geometry."""
 
-  Ip_from_parameters: bool
+  Ip_from_parameters: bool = dataclasses.field(metadata=dict(static=True))
   Ip_profile_face: interpolated_param.InterpolatedVarSingleAxis
   psi: interpolated_param.InterpolatedVarSingleAxis
   psi_from_Ip: interpolated_param.InterpolatedVarSingleAxis
@@ -907,7 +913,7 @@ class StandardGeometryIntermediates:
         Ip_from_parameters=Ip_from_parameters,
         R_major=R_major,
         a_minor=a_minor,
-        B_0=B_0,
+        B_0=np.array(B_0),
         # TODO(b/335204606): handle COCOS shenanigans
         psi=psi_interpolant * 2 * np.pi,
         Ip_profile=Ip_eqdsk,
@@ -926,29 +932,33 @@ class StandardGeometryIntermediates:
         vpr=vpr,
         n_rho=n_rho,
         hires_factor=hires_factor,
-        z_magnetic_axis=Zaxis,
+        z_magnetic_axis=np.array(Zaxis),
     )
 
   @classmethod
   def from_IMAS(
       cls,
-      equilibrium_object: str | Any,
-      geometry_dir: str | None,
+      geometry_directory: str | None,
       Ip_from_parameters: bool,
       n_rho: int,
       hires_factor: int,
+      equilibrium_object: Optional[IDSToplevel] = None,
+      imas_uri: Optional[str] = None,
+      imas_filepath: Optional[str] = None,
   ) -> typing_extensions.Self:
     """Constructs a StandardGeometryIntermediates from a IMAS equilibrium IDS.
 
     Args:
-      equilibrium_object: Either directly the equilbrium IDS containing the relevant data, or the name of the IMAS netCDF file containing the equilibrium.
-      geometry_dir: Directory where to find the scenario file ontaining the parameters of the Data entry to read.
+      geometry_directory: Directory where to find the scenario file ontaining the parameters of the Data entry to read.
         If None, then it defaults to another dir. See implementation.
       Ip_from_parameters: If True, the Ip is taken from the parameters and the
-        values in the Geometry are resacled to match the new Ip.
-      n_rho: Radial grid points (num cells)
+        values in the Geometry are rescaled to match the new Ip.
+      n_rho: Radial grid points (num cells).
       hires_factor: Grid refinement factor for poloidal flux <--> plasma current
         calculations.
+      equilibrium_object: The equilibrium IDS containing the relevant data.
+      imas_uri: The IMAS uri containing the equilibrium data.
+      imas_filepath: The path to the IMAS netCDF file containing the equilibrium data.
 
     Returns:
       A StandardGeometry instance based on the input file. This can then be
@@ -956,7 +966,9 @@ class StandardGeometryIntermediates:
     """
     inputs = imas_equilibrium.geometry_from_IMAS(
         equilibrium_object=equilibrium_object,
-        geometry_dir=geometry_dir,
+        imas_uri=imas_uri,
+        imas_filepath=imas_filepath,
+        geometry_directory=geometry_directory,
         Ip_from_parameters=Ip_from_parameters,
         n_rho=n_rho,
         hires_factor=hires_factor,

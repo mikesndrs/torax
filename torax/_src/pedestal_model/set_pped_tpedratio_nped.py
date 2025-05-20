@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Pedestal model that specifies pressure, temperature ratio, and density."""
-import chex
+import dataclasses
+import jax
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
@@ -26,7 +27,8 @@ from typing_extensions import override
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   """Dynamic runtime params for the BgB transport model."""
 
@@ -69,9 +71,6 @@ class SetPressureTemperatureRatioAndDensityPedestalModel(
         dynamic_runtime_params_slice.pedestal.n_e_ped * nGW,
         dynamic_runtime_params_slice.pedestal.n_e_ped,
     )
-    n_e_ped_ref = (
-        n_e_ped / dynamic_runtime_params_slice.numerics.density_reference
-    )
 
     # Calculate T_e_ped.
     temperature_ratio = dynamic_runtime_params_slice.pedestal.T_i_T_e_ratio
@@ -79,7 +78,7 @@ class SetPressureTemperatureRatioAndDensityPedestalModel(
     Z_i = core_profiles.Z_i
     # Find the value of Z_eff at the pedestal top.
     rho_norm_ped_top = dynamic_runtime_params_slice.pedestal.rho_norm_ped_top
-    Z_eff = dynamic_runtime_params_slice.plasma_composition.Z_eff
+    Z_eff = core_profiles.Z_eff
 
     ped_idx = jnp.abs(geo.rho_norm - rho_norm_ped_top).argmin()
     Z_eff_ped = jnp.take(Z_eff, ped_idx)
@@ -89,28 +88,27 @@ class SetPressureTemperatureRatioAndDensityPedestalModel(
         Z_i_ped, Z_impurity_ped, Z_eff_ped
     )
     # Calculate n_i and n_impurity.
-    n_i_ped = dilution_factor_ped * n_e_ped_ref
-    n_impurity_ped = (n_e_ped_ref - Z_i_ped * n_i_ped) / Z_impurity_ped
+    n_i_ped = dilution_factor_ped * n_e_ped
+    n_impurity_ped = (n_e_ped - Z_i_ped * n_i_ped) / Z_impurity_ped
     # Assumption that impurity is at the same temperature as the ion AND
     # the pressure P = P_e + P_i + P_imp.
     # P = T_e*n_e + T_i*n_i + T_i*n_imp.
-    prefactor = constants.CONSTANTS.keV2J * core_profiles.density_reference
     T_e_ped = (
         dynamic_runtime_params_slice.pedestal.P_ped
         / (
-            n_e_ped_ref  # Electron pressure contribution.
+            n_e_ped  # Electron pressure contribution.
             + temperature_ratio * n_i_ped  # Ion pressure contribution.
             + temperature_ratio
             * n_impurity_ped  # Impurity pressure contribution.
         )
-        / prefactor
+        / constants.CONSTANTS.keV2J
     )
 
     # Calculate T_i_ped
     T_i_ped = temperature_ratio * T_e_ped
 
     return pedestal_model.PedestalModelOutput(
-        n_e_ped=n_e_ped_ref,
+        n_e_ped=n_e_ped,
         T_i_ped=T_i_ped,
         T_e_ped=T_e_ped,
         rho_norm_ped_top=dynamic_runtime_params_slice.pedestal.rho_norm_ped_top,

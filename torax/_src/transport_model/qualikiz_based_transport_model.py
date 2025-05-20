@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Base class and utils for Qualikiz-based models."""
+import dataclasses
 
 import chex
+import jax
 from jax import numpy as jnp
 from torax._src import constants as constants_module
 from torax._src import state
@@ -23,7 +25,8 @@ from torax._src.physics import psi_calculations
 from torax._src.transport_model import quasilinear_transport_model
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(quasilinear_transport_model.DynamicRuntimeParams):
   """Shared parameters for Qualikiz-based models."""
 
@@ -34,7 +37,8 @@ class DynamicRuntimeParams(quasilinear_transport_model.DynamicRuntimeParams):
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class QualikizInputs(quasilinear_transport_model.QuasilinearInputs):
   """Inputs to Qualikiz-based models."""
 
@@ -77,8 +81,6 @@ class QualikizBasedTransportModel(
 
   def _prepare_qualikiz_inputs(
       self,
-      Z_eff_face: chex.Array,
-      density_reference: chex.Numeric,
       transport: DynamicRuntimeParams,
       geo: geometry.Geometry,
       core_profiles: state.CoreProfiles,
@@ -128,16 +130,12 @@ class QualikizBasedTransportModel(
     x = jnp.where(jnp.abs(x) < constants.eps, constants.eps, x)
 
     # Ion to electron temperature ratio
-    Ti_Te = (
-        core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
-    )
+    Ti_Te = core_profiles.T_i.face_value() / core_profiles.T_e.face_value()
 
     # logarithm of normalized collisionality
     nu_star = collisions.calc_nu_star(
         geo=geo,
         core_profiles=core_profiles,
-        density_reference=density_reference,
-        Z_eff_face=Z_eff_face,
         collisionality_multiplier=transport.collisionality_multiplier,
     )
     log_nu_star_face = jnp.log10(nu_star)
@@ -145,7 +143,6 @@ class QualikizBasedTransportModel(
     # calculate alpha for magnetic shear correction (see S. van Mulders NF 2021)
     alpha = quasilinear_transport_model.calculate_alpha(
         core_profiles=core_profiles,
-        density_reference=density_reference,
         q=q,
         reference_magnetic_field=geo.B_0,
         normalized_logarithmic_gradients=normalized_logarithmic_gradients,
@@ -188,7 +185,7 @@ class QualikizBasedTransportModel(
     )
     normni = core_profiles.n_i.face_value() / core_profiles.n_e.face_value()
     return QualikizInputs(
-        Z_eff_face=Z_eff_face,
+        Z_eff_face=core_profiles.Z_eff_face,
         lref_over_lti=normalized_logarithmic_gradients.lref_over_lti,
         lref_over_lte=normalized_logarithmic_gradients.lref_over_lte,
         lref_over_lne=normalized_logarithmic_gradients.lref_over_lne,

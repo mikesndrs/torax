@@ -21,10 +21,11 @@ import numpy as np
 from torax._src.config import build_runtime_params
 from torax._src.core_profiles import initialization
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
-from torax._src.sources import source_models as source_models_lib
 from torax._src.test_utils import core_profile_helpers
 from torax._src.test_utils import default_configs
 from torax._src.torax_pydantic import model_config
+
+# pylint: disable=invalid-name
 
 
 class InitialStatesTest(parameterized.TestCase):
@@ -41,9 +42,8 @@ class InitialStatesTest(parameterized.TestCase):
         'normalize_n_e_to_nbar': False,
     }
     torax_config = model_config.ToraxConfig.from_dict(config)
-    source_models = source_models_lib.SourceModels(
-        sources=torax_config.sources, neoclassical=torax_config.neoclassical
-    )
+    source_models = torax_config.sources.build_models()
+    neoclassical_models = torax_config.neoclassical.build_models()
     dynamic_provider = (
         build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
             torax_config
@@ -64,22 +64,19 @@ class InitialStatesTest(parameterized.TestCase):
         static_runtime_params_slice=static_slice,
         geo=geo,
         source_models=source_models,
+        neoclassical_models=neoclassical_models,
     )
-    np.testing.assert_allclose(
-        core_profiles.T_i.right_face_constraint, 27.7
-    )
-    np.testing.assert_allclose(
-        core_profiles.T_e.right_face_constraint, 42.0
-    )
-    np.testing.assert_allclose(core_profiles.n_e.right_face_constraint, 0.1)
+    np.testing.assert_allclose(core_profiles.T_i.right_face_constraint, 27.7)
+    np.testing.assert_allclose(core_profiles.T_e.right_face_constraint, 42.0)
+    np.testing.assert_allclose(core_profiles.n_e.right_face_constraint, 0.1e20)
 
   def test_core_profiles_quasineutrality_check(self):
     """Tests core_profiles quasineutrality check on initial state."""
     torax_config = model_config.ToraxConfig.from_dict(
         default_configs.get_default_config_dict()
     )
-    source_models = source_models_lib.SourceModels(
-        sources=torax_config.sources, neoclassical=torax_config.neoclassical)
+    source_models = torax_config.sources.build_models()
+    neoclassical_models = torax_config.neoclassical.build_models()
     dynamic_runtime_params_slice_provider = (
         build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
             torax_config
@@ -100,6 +97,7 @@ class InitialStatesTest(parameterized.TestCase):
         static_runtime_params_slice=static_slice,
         geo=geo,
         source_models=source_models,
+        neoclassical_models=neoclassical_models,
     )
     assert core_profiles.quasineutrality_satisfied()
     core_profiles = dataclasses.replace(

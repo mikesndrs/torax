@@ -12,19 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from unittest import mock
+
 from absl.testing import absltest
 from absl.testing import parameterized
 from jax import numpy as jnp
 import numpy as np
-from torax._src import constants
 from torax._src import jax_utils
 from torax._src.config import build_runtime_params
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import profile_conditions as profile_conditions_lib
 from torax._src.config import runtime_params_slice
 from torax._src.core_profiles import getters
+from torax._src.core_profiles import initialization
 from torax._src.fvm import cell_variable
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
+from torax._src.physics import charge_states
 from torax._src.physics import formulas
 from torax._src.test_utils import default_configs
 from torax._src.torax_pydantic import model_config
@@ -75,7 +77,7 @@ class GettersTest(parameterized.TestCase):
 
   def test_n_e_core_profile_setter(self):
     """Tests that setting n_e works."""
-    expected_value = np.array([1.4375, 1.3125, 1.1875, 1.0625])
+    expected_value = np.array([1.4375e20, 1.3125e20, 1.1875e20, 1.0625e20])
     profile_conditions = profile_conditions_lib.ProfileConditions.from_dict(
         {
             'n_e': {0: {0: 1.5e20, 1: 1e20}},
@@ -91,7 +93,6 @@ class GettersTest(parameterized.TestCase):
     static_slice = _create_static_slice_mock(profile_conditions)
     n_e = getters.get_updated_electron_density(
         static_slice,
-        numerics.build_dynamic_params(1.0),
         profile_conditions.build_dynamic_params(1.0),
         self.geo,
     )
@@ -103,15 +104,14 @@ class GettersTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
-      # When normalize_n_e_to_nbar=False, take n_e_right_bc from n_e[0.0][1.0]
-      (None, False, 1.0),
+      # When normalize_n_e_to_nbar=False, take n_e_right_bc from n_e
+      (None, False, 1.0e20),
       # Take n_e_right_bc from provided value.
-      (0.85e20, False, 0.85),
-      # normalize_n_e_to_nbar=True, n_e_right_bc from n_e[0.0][1.0] and
-      # normalize.
-      (None, True, 0.8050314),
+      (0.85e20, False, 0.85e20),
+      # normalize_n_e_to_nbar=True, n_e_right_bc from n_e and normalize.
+      (None, True, 0.8050314e20),
       # Even when normalize_n_e_to_nbar, boundary condition is absolute.
-      (0.5e20, True, 0.5),
+      (0.5e20, True, 0.5e20),
   )
   def test_density_boundary_condition_override(
       self,
@@ -134,7 +134,6 @@ class GettersTest(parameterized.TestCase):
     static_slice = _create_static_slice_mock(profile_conditions)
     n_e = getters.get_updated_electron_density(
         static_slice,
-        numerics.build_dynamic_params(1.0),
         profile_conditions.build_dynamic_params(1.0),
         self.geo,
     )
@@ -163,22 +162,16 @@ class GettersTest(parameterized.TestCase):
     static_slice = _create_static_slice_mock(profile_conditions)
     n_e_normalized = getters.get_updated_electron_density(
         static_slice,
-        numerics.build_dynamic_params(1.0),
         profile_conditions.build_dynamic_params(1.0),
         self.geo,
     )
 
-    nbar_normalized = nbar / constants.DENSITY_SCALING_FACTOR
-
-    np.testing.assert_allclose(
-        np.mean(n_e_normalized.value), nbar_normalized, rtol=1e-1
-    )
+    np.testing.assert_allclose(np.mean(n_e_normalized.value), nbar, rtol=1e-1)
 
     profile_conditions._update_fields({'normalize_n_e_to_nbar': False})
     static_slice = _create_static_slice_mock(profile_conditions)
     n_e_unnormalized = getters.get_updated_electron_density(
         static_slice,
-        numerics.build_dynamic_params(1.0),
         profile_conditions.build_dynamic_params(1.0),
         self.geo,
     )
@@ -198,9 +191,9 @@ class GettersTest(parameterized.TestCase):
     """Tests setting the Greenwald fraction vs. not gives consistent results."""
     numerics = numerics_lib.Numerics.from_dict({})
     profile_conditions = profile_conditions_lib.ProfileConditions.from_dict({
-        'n_e': {0: {0: 1.5e20, 1: 1e20}},
+        'n_e': {0: {0: 1.5, 1: 1}},
         'n_e_nbar_is_fGW': True,
-        'nbar': 1e20,
+        'nbar': 1.0,
         'normalize_n_e_to_nbar': normalize_n_e_to_nbar,
         'n_e_right_bc': 0.5e20,
     })
@@ -209,15 +202,25 @@ class GettersTest(parameterized.TestCase):
     static_slice = _create_static_slice_mock(profile_conditions)
     n_e_fGW = getters.get_updated_electron_density(
         static_slice,
-        numerics.build_dynamic_params(1.0),
         profile_conditions.build_dynamic_params(1.0),
         self.geo,
     )
-    profile_conditions._update_fields({'n_e_nbar_is_fGW': False})
+    profile_conditions._update_fields(
+        {
+            'n_e_nbar_is_fGW': False,
+            'n_e': {0: {0: 1.5e20, 1: 1e20}},
+            'nbar': 1e20,
+        },
+    )
+    # Need to reset n_e grid after private _update_fields. Otherwise, the grid
+    # is None. Cannot use public ToraxConfig.update_fields since
+    # profile_conditions is not a ToraxConfig.
+    torax_pydantic.set_grid(
+        profile_conditions, self.geo.torax_mesh, mode='relaxed'
+    )
 
     n_e = getters.get_updated_electron_density(
         static_slice,
-        numerics.build_dynamic_params(1.0),
         profile_conditions.build_dynamic_params(1.0),
         self.geo,
     )
@@ -226,8 +229,8 @@ class GettersTest(parameterized.TestCase):
     np.all(np.isclose(ratio, ratio[0]))
     self.assertNotEqual(ratio[0], 1.0)
 
-  def test_get_ion_density_and_charge_states(self):
-    expected_value = np.array([1.4375, 1.3125, 1.1875, 1.0625])
+  def test_get_updated_ion_data(self):
+    expected_value = np.array([1.4375e20, 1.3125e20, 1.1875e20, 1.0625e20])
     config = default_configs.get_default_config_dict()
     config['profile_conditions'] = {
         'n_e': {0: {0: 1.5e20, 1: 1e20}},
@@ -236,6 +239,7 @@ class GettersTest(parameterized.TestCase):
         'nbar': 1e20,
         'normalize_n_e_to_nbar': False,
     }
+    config['plasma_composition']['Z_eff'] = 2.0
     torax_config = model_config.ToraxConfig.from_dict(config)
     provider = (
         build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
@@ -257,37 +261,212 @@ class GettersTest(parameterized.TestCase):
     )
     n_e = getters.get_updated_electron_density(
         static_slice,
-        dynamic_runtime_params_slice.numerics,
         dynamic_runtime_params_slice.profile_conditions,
         geo,
     )
-    n_i, n_impurity, Z_i, _, Z_impurity, _ = (
-        getters.get_ion_density_and_charge_states(
-            static_slice,
-            dynamic_runtime_params_slice,
-            geo,
-            n_e,
-            T_e,
-        )
+    ions = getters.get_updated_ions(
+        static_slice,
+        dynamic_runtime_params_slice,
+        geo,
+        n_e,
+        T_e,
     )
 
     Z_eff = dynamic_runtime_params_slice.plasma_composition.Z_eff
 
     dilution_factor = formulas.calculate_main_ion_dilution_factor(
-        Z_i, Z_impurity, Z_eff
+        ions.Z_i, ions.Z_impurity, Z_eff
     )
     np.testing.assert_allclose(
-        n_i.value,
+        ions.n_i.value,
         expected_value * dilution_factor,
-        atol=1e-6,
         rtol=1e-6,
     )
     np.testing.assert_allclose(
-        n_impurity.value,
-        (expected_value - n_i.value * Z_i) / Z_impurity,
-        atol=1e-6,
+        ions.n_impurity.value,
+        (expected_value - ions.n_i.value * ions.Z_i) / ions.Z_impurity,
         rtol=1e-6,
     )
+
+  def test_Z_eff_calculation(self):
+    config = default_configs.get_default_config_dict()
+    config['plasma_composition']['Z_eff'] = {0.0: 1.0, 1.0: 2.0}
+    torax_config = model_config.ToraxConfig.from_dict(config)
+    source_models = torax_config.sources.build_models()
+    neoclassical_models = torax_config.neoclassical.build_models()
+    dynamic_provider = (
+        build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
+            torax_config
+        )
+    )
+    dynamic_runtime_params_slice, geo = (
+        build_runtime_params.get_consistent_dynamic_runtime_params_slice_and_geometry(
+            t=torax_config.numerics.t_initial,
+            dynamic_runtime_params_slice_provider=dynamic_provider,
+            geometry_provider=torax_config.geometry.build_provider,
+        )
+    )
+    static_slice = build_runtime_params.build_static_params_from_config(
+        torax_config
+    )
+    core_profiles = initialization.initial_core_profiles(
+        dynamic_runtime_params_slice=dynamic_runtime_params_slice,
+        static_runtime_params_slice=static_slice,
+        geo=geo,
+        source_models=source_models,
+        neoclassical_models=neoclassical_models,
+    )
+
+    # dynamic_runtime_params_slice.plasma_composition.Z_eff_face is not
+    # expected to match core_profiles.Z_eff_face, since the main ion dilution
+    # does not scale linearly with Z_eff, and thus Z_eff calculated from the
+    # face values of the core profiles will not match the interpolated
+    # Z_eff_face from plasma_composition. Only the cell grid Z_eff and
+    # edge Z_eff should match exactly, since those were actually used to
+    # calculate n_i and n_impurity.
+    expected_Z_eff = dynamic_runtime_params_slice.plasma_composition.Z_eff
+    expected_Z_eff_edge = (
+        dynamic_runtime_params_slice.plasma_composition.Z_eff_face[-1]
+    )
+
+    calculated_Z_eff = getters._calculate_Z_eff(
+        core_profiles.Z_i,
+        core_profiles.Z_impurity,
+        core_profiles.n_i.value,
+        core_profiles.n_impurity.value,
+        core_profiles.n_e.value,
+    )
+
+    calculated_Z_eff_face = getters._calculate_Z_eff(
+        core_profiles.Z_i_face,
+        core_profiles.Z_impurity_face,
+        core_profiles.n_i.face_value(),
+        core_profiles.n_impurity.face_value(),
+        core_profiles.n_e.face_value(),
+    )
+
+    np.testing.assert_allclose(
+        core_profiles.Z_eff,
+        expected_Z_eff,
+        err_msg=(
+            'Calculated Z_eff does not match expectation from config.\n'
+            f'Calculated Z_eff: {calculated_Z_eff}\n'
+            f'Expected Z_eff: {expected_Z_eff}'
+        ),
+        rtol=1e-6,
+    )
+
+    np.testing.assert_allclose(
+        core_profiles.Z_eff_face[-1],
+        expected_Z_eff_edge,
+        err_msg=(
+            'Calculated Z_eff edge does not match expectation from config.\n'
+            f'Calculated Z_eff edge: {calculated_Z_eff_face[-1]}\n'
+            f'Expected Z_eff edge: {expected_Z_eff_edge}'
+        ),
+        rtol=1e-6,
+    )
+
+  def test_get_updated_ions_impurity_mixture(self):
+    """Tests that ion densities are correctly calculated for an impurity mixture."""
+
+    # 1. Define a "ground truth" plasma with individual impurity species.
+    # Assumes a single deuterium main ion
+    T_e = 50.0  # keV
+    n_e = 1e20
+    n_e_ratio_w = 1e-4  # n_W / n_e
+    n_e_ratio_he3 = 0.03  # n_He3 / n_e
+    # Calculate ion charges for the ground truth plasma.
+    z_d = constants.ION_PROPERTIES_DICT['D'].Z
+    z_he3 = constants.ION_PROPERTIES_DICT['He3'].Z
+    z_w = charge_states.calculate_average_charge_state_single_species(
+        jnp.array(T_e), 'W'
+    )
+    # Calculate the dilution factor for the ground truth plasma.
+    n_d = n_e * (1 - z_w * n_e_ratio_w - z_he3 * n_e_ratio_he3) / z_d
+    zeff = float((
+        (n_d / n_e) * z_d**2 + n_e_ratio_w * z_w**2 + n_e_ratio_he3 * z_he3**2
+    ))
+    dilution = n_d / n_e
+
+    # 2. Set up TORAX to use an effective impurity mixture.
+    impurity_fraction_w = n_e_ratio_w / (n_e_ratio_w + n_e_ratio_he3)
+    impurity_fraction_he3 = 1.0 - impurity_fraction_w
+    config_dict = {
+        'profile_conditions': {
+            'n_e': n_e,
+            'T_e': T_e,
+            'T_e_right_bc': T_e,
+            'n_e_right_bc': n_e,
+        },
+        'plasma_composition': {
+            'main_ion': 'D',
+            'impurity': {
+                'W': impurity_fraction_w,
+                'He3': impurity_fraction_he3,
+            },
+            'Z_eff': zeff,
+        },
+        'numerics': {},
+        'geometry': {'geometry_type': 'circular', 'n_rho': 4},
+        'sources': {},
+        'solver': {},
+        'transport': {},
+        'pedestal': {},
+    }
+    torax_config = model_config.ToraxConfig.from_dict(config_dict)
+
+    # 3. Call the function under test.
+    provider = (
+        build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
+            torax_config
+        )
+    )
+    static_slice = build_runtime_params.build_static_params_from_config(
+        torax_config
+    )
+    dynamic_runtime_params_slice = provider(t=0.0)
+    geo = torax_config.geometry.build_provider(t=0.0)
+    T_e_cell_variable = cell_variable.CellVariable(
+        value=jnp.full_like(geo.rho_norm, T_e),
+        dr=geo.drho_norm,
+        right_face_constraint=T_e,
+        right_face_grad_constraint=None,
+    )
+    n_e_cell_variable = cell_variable.CellVariable(
+        value=jnp.full_like(geo.rho_norm, n_e),
+        dr=geo.drho_norm,
+        right_face_constraint=n_e,
+        right_face_grad_constraint=None,
+    )
+    ions = getters.get_updated_ions(
+        static_slice,
+        dynamic_runtime_params_slice,
+        geo,
+        n_e_cell_variable,
+        T_e_cell_variable,
+    )
+
+    # 4. Assertions
+    # Check that the effective impurity charge is calculated as <Z^2>/<Z>.
+    expected_Z_avg = impurity_fraction_w * z_w + impurity_fraction_he3 * z_he3
+    expected_Z2_avg = (
+        impurity_fraction_w * z_w**2 + impurity_fraction_he3 * z_he3**2
+    )
+    expected_Z_impurity = expected_Z2_avg / expected_Z_avg
+    np.testing.assert_allclose(ions.Z_impurity, expected_Z_impurity, rtol=1e-6)
+
+    # Check that the calculated dilution factor matches the ground truth.
+    calculated_dilution = ions.n_i.value / n_e_cell_variable.value
+    np.testing.assert_allclose(calculated_dilution, dilution, rtol=1e-6)
+
+    # Check that Z_eff can be reconstructed correctly.
+    reconstructed_zeff = (
+        ions.n_i.value / n_e_cell_variable.value
+    ) * ions.Z_i**2 + (
+        ions.n_impurity.value / n_e_cell_variable.value
+    ) * ions.Z_impurity**2
+    np.testing.assert_allclose(reconstructed_zeff, zeff, rtol=1e-6)
 
 
 def _create_static_slice_mock(

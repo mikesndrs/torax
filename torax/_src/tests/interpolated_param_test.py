@@ -173,8 +173,8 @@ class InterpolatedParamTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
-      (interpolated_param.PiecewiseLinearInterpolatedParam,),
-      (interpolated_param.StepInterpolatedParam,),
+      (interpolated_param._PiecewiseLinearInterpolatedParam,),
+      (interpolated_param._StepInterpolatedParam,),
   )
   def test_interpolated_param_1d_xs_and_1d_or_2d_ys(self, range_class):
     """Tests that the interpolated_param only take 1D inputs."""
@@ -198,8 +198,8 @@ class InterpolatedParamTest(parameterized.TestCase):
       )
 
   @parameterized.parameters(
-      (interpolated_param.PiecewiseLinearInterpolatedParam,),
-      (interpolated_param.StepInterpolatedParam,),
+      (interpolated_param._PiecewiseLinearInterpolatedParam,),
+      (interpolated_param._StepInterpolatedParam,),
   )
   def test_interpolated_param_need_xs_ys_same_shape(self, range_class):
     """Tests the xs and ys inputs have to have the same shape."""
@@ -214,19 +214,20 @@ class InterpolatedParamTest(parameterized.TestCase):
       )
 
   @parameterized.parameters(
-      (interpolated_param.PiecewiseLinearInterpolatedParam,),
-      (interpolated_param.StepInterpolatedParam,),
+      interpolated_param.InterpolationMode.PIECEWISE_LINEAR,
+      interpolated_param.InterpolationMode.STEP,
   )
-  def test_interpolated_param_need_xs_to_be_sorted(self, range_class):
-    """Tests the xs inputs have to be sorted."""
-    range_class(
-        xs=jnp.array([1.0, 2.0, 3.0, 4.0]),
-        ys=jnp.array([1.0, 2.0, 3.0, 4.0]),
-    )
+  def test_interpolated_param_is_invariant_to_xs_order(
+      self,
+      interpolation_mode: interpolated_param.InterpolationMode,
+  ):
     with self.assertRaises(RuntimeError):
-      range_class(
-          xs=jnp.array([4.0, 2.0, 1.0, 3.0]),
-          ys=jnp.array([1.0, 2.0, 3.0, 4.0]),
+      interpolated_param.InterpolatedVarSingleAxis(
+          value=(
+              jnp.array([4.0, 2.0, 1.0, 3.0]),
+              jnp.array([4.0, 2.0, 1.0, 3.0]),
+          ),
+          interpolation_mode=interpolation_mode,
       )
 
   @parameterized.named_parameters(
@@ -493,19 +494,133 @@ class InterpolatedParamTest(parameterized.TestCase):
           interpolated_param.InterpolationMode.STEP,
       ],
   )
-  def test_interpolated_var_properties(
+  def test_interpolated_param_is_usable_under_jit(
       self,
       is_bool: bool,
       interpolation_mode: interpolated_param.InterpolationMode,
   ):
-    """Check the properties of the interpolated var are set correctly."""
     var = interpolated_param.InterpolatedVarSingleAxis(
         value=(np.array([0.0, 1.0]), np.array([0.0, 1.0])),
         is_bool_param=is_bool,
         interpolation_mode=interpolation_mode,
     )
-    self.assertEqual(var.is_bool_param, is_bool)
-    self.assertEqual(var.interpolation_mode, interpolation_mode)
+
+    @jax.jit
+    def f(x: interpolated_param.InterpolatedVarSingleAxis, t: chex.Numeric):
+      return x.get_value(x=t)
+
+    interpolated_output_jit = jax.jit(f)(var, 0.5)
+    with self.subTest('jit_and verified'):
+      interpolated_output = var.get_value(x=0.5)
+      np.testing.assert_allclose(interpolated_output_jit, interpolated_output)
+
+    with self.subTest('new_values_same_compile'):
+      var2 = interpolated_param.InterpolatedVarSingleAxis(
+          value=(np.array([0.0, 1.0]), np.array([1.0, 2.0])),
+          is_bool_param=is_bool,
+          interpolation_mode=interpolation_mode,
+      )
+      interpolated_output_jit = f(var2, 0.5)
+      interpolated_output = var2.get_value(x=0.5)
+      np.testing.assert_allclose(interpolated_output_jit, interpolated_output)
+      self.assertEqual(jax_utils.get_number_of_compiles(f), 1)
+
+  @parameterized.product(
+      time_interpolation_mode=[
+          interpolated_param.InterpolationMode.PIECEWISE_LINEAR,
+          interpolated_param.InterpolationMode.STEP,
+      ],
+      rho_interpolation_mode=[
+          interpolated_param.InterpolationMode.PIECEWISE_LINEAR,
+          interpolated_param.InterpolationMode.STEP,
+      ],
+  )
+  def test_interpolated_var_time_rho_is_usable_under_jit(
+      self,
+      time_interpolation_mode: interpolated_param.InterpolationMode,
+      rho_interpolation_mode: interpolated_param.InterpolationMode,
+  ):
+    values1 = {
+        0.0: (np.array([0.0, 1.0]), np.array([0.0, 1.0])),
+        1.0: (np.array([0.0, 1.0]), np.array([1.0, 2.0])),
+    }
+    rho_norm = np.array([0.0, 0.5, 1.0])
+    var = interpolated_param.InterpolatedVarTimeRho(
+        values=values1,
+        rho_norm=rho_norm,
+        time_interpolation_mode=time_interpolation_mode,
+        rho_interpolation_mode=rho_interpolation_mode,
+    )
+
+    @jax.jit
+    def f(v: interpolated_param.InterpolatedVarTimeRho, t: chex.Numeric):
+      return v.get_value(x=t)
+
+    t = 0.5
+    with self.subTest('jit_and_verified'):
+      interpolated_output_jit = f(var, t)
+      interpolated_output = var.get_value(x=t)
+      np.testing.assert_allclose(interpolated_output_jit, interpolated_output)
+
+    with self.subTest('new_values_same_compile'):
+      values2 = {
+          0.0: (np.array([0.0, 1.0]), np.array([2.0, 3.0])),
+          1.0: (np.array([0.0, 1.0]), np.array([3.0, 4.0])),
+      }
+      var2 = interpolated_param.InterpolatedVarTimeRho(
+          values=values2,
+          rho_norm=rho_norm,
+          time_interpolation_mode=time_interpolation_mode,
+          rho_interpolation_mode=rho_interpolation_mode,
+      )
+      interpolated_output_jit2 = f(var2, t)
+      interpolated_output2 = var2.get_value(x=t)
+      np.testing.assert_allclose(
+          interpolated_output_jit2, interpolated_output2
+      )
+      self.assertEqual(jax_utils.get_number_of_compiles(f), 1)
+
+    with self.subTest('different_shapes_recompiles'):
+      values3 = {
+          0.0: (np.array([0.0, 1.0]), np.array([0.0, 1.0])),
+          1.0: (np.array([0.0, 1.0]), np.array([1.0, 2.0])),
+          2.0: (np.array([0.0, 1.0]), np.array([1.0, 2.0])),
+      }
+      var3 = interpolated_param.InterpolatedVarTimeRho(
+          values=values3,
+          rho_norm=rho_norm,
+          time_interpolation_mode=time_interpolation_mode,
+          rho_interpolation_mode=rho_interpolation_mode,
+      )
+      t = 1.5
+      interpolated_output_jit3 = f(var3, t)
+      interpolated_output3 = var3.get_value(x=t)
+      np.testing.assert_allclose(
+          interpolated_output_jit3, interpolated_output3
+      )
+      self.assertEqual(jax_utils.get_number_of_compiles(f), 2)
+
+  def test_interpolated_var_single_axis_eq(self):
+    var1 = interpolated_param.InterpolatedVarSingleAxis(
+        value=(np.array([0.0, 1.0]), np.array([0.0, 1.0])),
+        interpolation_mode=interpolated_param.InterpolationMode.PIECEWISE_LINEAR,
+    )
+    var2 = interpolated_param.InterpolatedVarSingleAxis(
+        value=(np.array([0.0, 1.0]), np.array([0.0, 1.0])),
+        interpolation_mode=interpolated_param.InterpolationMode.PIECEWISE_LINEAR,
+    )
+    self.assertEqual(var1, var2)
+
+  def test_interpolated_var_single_axis_eq_false(self):
+    var1 = interpolated_param.InterpolatedVarSingleAxis(
+        value=(np.array([0.0, 1.0]), np.array([0.0, 1.0])),
+        interpolation_mode=interpolated_param.InterpolationMode.PIECEWISE_LINEAR,
+    )
+    var2 = interpolated_param.InterpolatedVarSingleAxis(
+        value=(np.array([0.0, 1.0]), np.array([0.0, 2.0])),
+        interpolation_mode=interpolated_param.InterpolationMode.PIECEWISE_LINEAR,
+    )
+    self.assertNotEqual(var1, var2)
 
 
 if __name__ == '__main__':

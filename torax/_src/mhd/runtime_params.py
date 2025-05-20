@@ -18,7 +18,8 @@ import chex
 from torax._src.mhd.sawtooth import runtime_params as sawtooth_runtime_params
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicMHDParams:
   """Container for dynamic parameters of all configured MHD models."""
 

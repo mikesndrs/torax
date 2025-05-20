@@ -70,10 +70,8 @@ class SourceProfilesTest(parameterized.TestCase):
     sources = sources_pydantic_model.Sources.from_dict(
         default_sources.get_default_source_config()
     )
-    neoclassical = neoclassical_pydantic_model.Neoclassical.from_dict({})
-    source_models = source_models_lib.SourceModels(
-        sources=sources, neoclassical=neoclassical
-    )
+    source_models = sources.build_models()
+
     # Technically, the merge_source_profiles() function should be called with
     # source profiles where, for every source, only one of the implicit or
     # explicit profiles has non-zero values. That is what makes the summing

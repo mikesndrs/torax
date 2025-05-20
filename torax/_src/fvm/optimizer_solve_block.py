@@ -15,12 +15,14 @@
 
 See function docstring for details.
 """
-
+import functools
 from typing import TypeAlias
 
 import jax
 from torax._src import state
+from torax._src import xnp
 from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import convertors
 from torax._src.fvm import block_1d_coeffs
 from torax._src.fvm import calc_coeffs
 from torax._src.fvm import cell_variable
@@ -28,16 +30,21 @@ from torax._src.fvm import enums
 from torax._src.fvm import fvm_conversions
 from torax._src.fvm import residual_and_loss
 from torax._src.geometry import geometry
-from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.solver import predictor_corrector_method
-from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profiles
-from torax._src.transport_model import transport_model as transport_model_lib
-
 
 AuxiliaryOutput: TypeAlias = block_1d_coeffs.AuxiliaryOutput
 
 
+@functools.partial(
+    xnp.jit,
+    static_argnames=[
+        'static_runtime_params_slice',
+        'coeffs_callback',
+        'evolving_names',
+        'initial_guess_mode',
+    ],
+)
 def optimizer_solve_block(
     dt: jax.Array,
     static_runtime_params_slice: runtime_params_slice.StaticRuntimeParamsSlice,
@@ -48,10 +55,8 @@ def optimizer_solve_block(
     x_old: tuple[cell_variable.CellVariable, ...],
     core_profiles_t: state.CoreProfiles,
     core_profiles_t_plus_dt: state.CoreProfiles,
-    transport_model: transport_model_lib.TransportModel,
     explicit_source_profiles: source_profiles.SourceProfiles,
-    source_models: source_models_lib.SourceModels,
-    pedestal_model: pedestal_model_lib.PedestalModel,
+    physics_models: physics_models_lib.PhysicsModels,
     coeffs_callback: calc_coeffs.CoeffsCallback,
     evolving_names: tuple[str, ...],
     initial_guess_mode: enums.InitialGuessMode,
@@ -60,7 +65,6 @@ def optimizer_solve_block(
 ) -> tuple[
     tuple[cell_variable.CellVariable, ...],
     state.SolverNumericOutputs,
-    block_1d_coeffs.AuxiliaryOutput,
 ]:
   # pyformat: disable  # pyformat removes line breaks needed for readability
   """Runs one time step of an optimization-based solver on the equation defined by `coeffs`.
@@ -99,12 +103,9 @@ def optimizer_solve_block(
       prescribed quantities at the end of the time step. This includes evolving
       boundary conditions and prescribed time-dependent profiles that are not
       being evolved by the PDE system.
-    transport_model: Turbulent transport model callable.
     explicit_source_profiles: Pre-calculated sources implemented as explicit
       sources in the PDE.
-    source_models: Collection of source callables to generate source PDE
-      coefficients.
-    pedestal_model: Model of the pedestal's behavior.
+    physics_models: Physics models used for the calculations.
     coeffs_callback: Calculates diffusion, convection etc. coefficients given a
       core_profiles. Repeatedly called by the iterative optimizer.
     evolving_names: The names of variables within the core profiles that should
@@ -121,7 +122,6 @@ def optimizer_solve_block(
     x_new: Tuple, with x_new[i] giving channel i of x at the next time step
     solver_numeric_outputs: SolverNumericOutputs. Info about iterations and
       errors
-    aux_output: Extra auxiliary output from the calc_coeffs.
   """
   # pyformat: enable
 
@@ -130,6 +130,7 @@ def optimizer_solve_block(
       geo_t,
       core_profiles_t,
       x_old,
+      explicit_source_profiles=explicit_source_profiles,
       explicit_call=True,
   )
 
@@ -146,12 +147,13 @@ def optimizer_solve_block(
           geo_t,
           core_profiles_t,
           x_old,
+          explicit_source_profiles=explicit_source_profiles,
           allow_pereverzev=True,
           explicit_call=True,
       )
       # See linear_theta_method.py for comments on the predictor_corrector API
-      x_new_guess = tuple(
-          [core_profiles_t_plus_dt[name] for name in evolving_names]
+      x_new_guess = convertors.core_profiles_to_solver_x_tuple(
+          core_profiles_t_plus_dt, evolving_names
       )
       init_x_new = predictor_corrector_method.predictor_corrector_method(
           dt=dt,
@@ -163,6 +165,7 @@ def optimizer_solve_block(
           core_profiles_t_plus_dt=core_profiles_t_plus_dt,
           coeffs_exp=coeffs_exp_linear,
           coeffs_callback=coeffs_callback,
+          explicit_source_profiles=explicit_source_profiles,
       )
       init_x_new_vec = fvm_conversions.cell_variable_tuple_to_vec(init_x_new)
     case enums.InitialGuessMode.X_OLD:
@@ -178,7 +181,6 @@ def optimizer_solve_block(
   (
       x_new_vec,
       final_loss,
-      _,
       solver_numeric_outputs.inner_solver_iterations,
   ) = residual_and_loss.jaxopt_solver(
       dt=dt,
@@ -188,10 +190,8 @@ def optimizer_solve_block(
       x_old=x_old,
       init_x_new_vec=init_x_new_vec,
       core_profiles_t_plus_dt=core_profiles_t_plus_dt,
-      transport_model=transport_model,
       explicit_source_profiles=explicit_source_profiles,
-      source_models=source_models,
-      pedestal_model=pedestal_model,
+      physics_models=physics_models,
       coeffs_old=coeffs_old,
       evolving_names=evolving_names,
       maxiter=maxiter,
@@ -212,12 +212,4 @@ def optimizer_solve_block(
       lambda: 0,  # Called when False
   )
 
-  coeffs_final = coeffs_callback(
-      dynamic_runtime_params_slice_t_plus_dt,
-      geo_t_plus_dt,
-      core_profiles_t_plus_dt,
-      x_new,
-      allow_pereverzev=True,
-  )
-
-  return x_new, solver_numeric_outputs, coeffs_final.auxiliary_outputs
+  return x_new, solver_numeric_outputs

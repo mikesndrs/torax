@@ -18,10 +18,8 @@ from absl.testing import parameterized
 from torax._src.config import build_runtime_params
 from torax._src.core_profiles import initialization
 from torax._src.sources import bremsstrahlung_heat_sink
-from torax._src.sources import source_models as source_models_lib
 from torax._src.sources.tests import test_lib
 from torax._src.test_utils import torax_refs
-
 
 # pylint: disable=invalid-name
 
@@ -51,23 +49,20 @@ class BremsstrahlungHeatSinkTest(test_lib.SingleProfileSourceTestCase):
     static_runtime_params_slice = (
         build_runtime_params.build_static_params_from_config(references.config)
     )
-    source_models = source_models_lib.SourceModels(
-        sources=references.config.sources,
-        neoclassical=references.config.neoclassical,
-    )
+    source_models = references.config.sources.build_models()
+    neoclassical_models = references.config.neoclassical.build_models()
     core_profiles = initialization.initial_core_profiles(
         dynamic_runtime_params_slice=dynamic_runtime_params_slice,
         static_runtime_params_slice=static_runtime_params_slice,
         geo=geo,
         source_models=source_models,
+        neoclassical_models=neoclassical_models,
     )
 
     P_brem_total, P_brems_profile = (
         bremsstrahlung_heat_sink.calc_bremsstrahlung(
             core_profiles,
             geo,
-            dynamic_runtime_params_slice.plasma_composition.Z_eff_face,
-            dynamic_runtime_params_slice.numerics.density_reference,
         )
     )
 
@@ -78,8 +73,6 @@ class BremsstrahlungHeatSinkTest(test_lib.SingleProfileSourceTestCase):
         bremsstrahlung_heat_sink.calc_bremsstrahlung(
             core_profiles,
             geo,
-            dynamic_runtime_params_slice.plasma_composition.Z_eff_face,
-            dynamic_runtime_params_slice.numerics.density_reference,
             use_relativistic_correction=True,
         )
     )

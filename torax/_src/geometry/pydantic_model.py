@@ -17,7 +17,9 @@
 from collections.abc import Callable, Mapping
 import functools
 import inspect
-from typing import Annotated, Any, Literal, TypeAlias, TypeVar
+from typing import Annotated, Any, Literal, Optional, TypeAlias, TypeVar
+
+from imas.ids_toplevel import IDSToplevel
 import pydantic
 from torax._src.geometry import circular_geometry
 from torax._src.geometry import geometry
@@ -25,6 +27,7 @@ from torax._src.geometry import geometry_provider
 from torax._src.geometry import standard_geometry
 from torax._src.torax_pydantic import torax_pydantic
 import typing_extensions
+
 # Using invalid-name because we are using the same naming convention as the
 # external physics implementations
 # pylint: disable=invalid-name
@@ -257,9 +260,10 @@ class IMASConfig(torax_pydantic.BaseModelFrozen):
     hires_factor: Only used when the initial condition ``psi`` is from plasma
       current. Sets up a higher resolution mesh with ``nrho_hires = nrho *
       hi_res_fac``, used for ``j`` to ``psi`` conversions.
-    geometry_dir: Optionally overrides the default geometry directory.
-    equilibrium_object: Either directly the equilbrium IDS containing the relevant data,
-      or the path to the IMAS netCDF file containing the equilibrium.
+    geometry_directory: Optionally overrides the default geometry directory.
+    equilibrium_object: The equilibrium IDS containing the relevant data.
+    imas_uri: The IMAS uri containing the equilibrium data.
+    imas_filepath: The path to the IMAS netCDF file containing the equilibrium data.
     Ip_from_parameters: Toggles whether total plasma current is read from the
       configuration file, or from the geometry file. If True, then the `psi`
       calculated from the geometry file is scaled to match the desired `I_p`.
@@ -268,16 +272,31 @@ class IMASConfig(torax_pydantic.BaseModelFrozen):
   geometry_type: Annotated[Literal['imas'], TIME_INVARIANT] = 'imas'
   n_rho: Annotated[pydantic.PositiveInt, TIME_INVARIANT] = 25
   hires_factor: pydantic.PositiveInt = 4
-  geometry_dir: Annotated[str | None, TIME_INVARIANT] = None
-  equilibrium_object: str | Any = 'ITERhybrid_COCOS17_IDS_ddv4.nc'
-  Ip_from_parameters: Annotated[bool, TIME_INVARIANT] = False
+  geometry_directory: Annotated[str | None, TIME_INVARIANT] = None
+  equilibrium_object: Optional[IDSToplevel] = None
+  imas_uri: Optional[str] = None
+  imas_filepath: Optional[str] = None
+  Ip_from_parameters: Annotated[bool, TIME_INVARIANT] = True
 
   @pydantic.model_validator(mode='after')
   def _validate_model(self) -> typing_extensions.Self:
-    if isinstance(self.equilibrium_object, str) and self.equilibrium_object[-3:] == '.h5':
+    if [self.equilibrium_object, self.imas_uri, self.imas_filepath].count(
+        None
+    ) != 2:
       raise ValueError(
-          "If you are using hdf5 backend, the equilibrium_object must be either the repository containing the equilibrium.h5 and master.h5 files or '' (if your geometry_dir is already this specific repository).\n \
-        In any case, make sure geometry_dir + equilibrium_object gives the path to this directory and not to the .h5 file."
+          'IMAS geometry builder needs either `equilibrium_object`, `imas_uri`'
+          ' or `imas_filepath` to be a valid input.'
+      )
+    if self.imas_filepath is not None and self.imas_filepath[-3:] == '.h5':
+      raise ValueError(
+          'If you are using hdf5 backend, the path to the data must point the '
+          'directory containing the equilibrium.h5 and master.h5 files. As the '
+          'function concatenates the str for geometry_directory and '
+          'imas_filepath to give the path, your imas_filepath must be either '
+          'the directory containing these files or an empty string (if your '
+          'geometry_directory is already this specific repository).\n In any '
+          'case, make sure geometry_directory + imas_filepath gives the path '
+          'to this directory and not to the .h5 file.'
       )
     return self
 
@@ -294,9 +313,9 @@ class IMASConfig(torax_pydantic.BaseModelFrozen):
 class GeometryConfig(torax_pydantic.BaseModelFrozen):
   """Pydantic model for a single geometry config."""
 
-  config: CircularConfig | CheaseConfig | FBTConfig | EQDSKConfig | IMASConfig = (
-      pydantic.Field(discriminator='geometry_type')
-  )
+  config: (
+      CircularConfig | CheaseConfig | FBTConfig | EQDSKConfig | IMASConfig
+  ) = pydantic.Field(discriminator='geometry_type')
 
 
 class Geometry(torax_pydantic.BaseModelFrozen):

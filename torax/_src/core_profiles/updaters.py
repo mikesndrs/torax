@@ -29,18 +29,23 @@ Includes:
 """
 import dataclasses
 import functools
+
 import jax
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import jax_utils
 from torax._src import state
 from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import convertors
 from torax._src.core_profiles import getters
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry
+from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.physics import charge_states
 from torax._src.physics import formulas
 from torax._src.physics import psi_calculations
+from torax._src.sources import source_models as source_models_lib
+from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles as source_profiles_lib
 
 _trapz = jax.scipy.integrate.trapezoid
@@ -48,18 +53,18 @@ _trapz = jax.scipy.integrate.trapezoid
 # pylint: disable=invalid-name
 
 
-def _calculate_psi_value_constraint_from_vloop(
+def _calculate_psi_value_constraint_from_v_loop(
     dt: array_typing.ScalarFloat,
     theta: array_typing.ScalarFloat,
-    vloop_lcfs_t: array_typing.ScalarFloat,
-    vloop_lcfs_t_plus_dt: array_typing.ScalarFloat,
+    v_loop_lcfs_t: array_typing.ScalarFloat,
+    v_loop_lcfs_t_plus_dt: array_typing.ScalarFloat,
     psi_lcfs_t: array_typing.ScalarFloat,
 ) -> jax.Array:
   """Calculates the value constraint on the poloidal flux for the next time step from loop voltage."""
-  theta_weighted_vloop_lcfs = (
+  theta_weighted_v_loop_lcfs = (
       1 - theta
-  ) * vloop_lcfs_t + theta * vloop_lcfs_t_plus_dt
-  return psi_lcfs_t + theta_weighted_vloop_lcfs * dt
+  ) * v_loop_lcfs_t + theta * v_loop_lcfs_t_plus_dt
+  return psi_lcfs_t + theta_weighted_v_loop_lcfs * dt
 
 
 @functools.partial(
@@ -87,13 +92,13 @@ def get_prescribed_core_profile_values(
   """
   # If profiles are not evolved, they can still potential be time-evolving,
   # depending on the runtime params. If so, they are updated below.
-  if not static_runtime_params_slice.evolve_ion_heat:
+  if not dynamic_runtime_params_slice.numerics.evolve_ion_heat:
     T_i = getters.get_updated_ion_temperature(
         dynamic_runtime_params_slice.profile_conditions, geo
     ).value
   else:
     T_i = core_profiles.T_i.value
-  if not static_runtime_params_slice.evolve_electron_heat:
+  if not dynamic_runtime_params_slice.numerics.evolve_electron_heat:
     T_e_cell_variable = getters.get_updated_electron_temperature(
         dynamic_runtime_params_slice.profile_conditions, geo
     )
@@ -101,27 +106,24 @@ def get_prescribed_core_profile_values(
   else:
     T_e_cell_variable = core_profiles.T_e
     T_e = T_e_cell_variable.value
-  if not static_runtime_params_slice.evolve_density:
+  if not dynamic_runtime_params_slice.numerics.evolve_density:
     n_e_cell_variable = getters.get_updated_electron_density(
         static_runtime_params_slice,
-        dynamic_runtime_params_slice.numerics,
         dynamic_runtime_params_slice.profile_conditions,
         geo,
     )
   else:
     n_e_cell_variable = core_profiles.n_e
-  n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_impurity_face = (
-      getters.get_ion_density_and_charge_states(
-          static_runtime_params_slice,
-          dynamic_runtime_params_slice,
-          geo,
-          n_e_cell_variable,
-          T_e_cell_variable,
-      )
+  ions = getters.get_updated_ions(
+      static_runtime_params_slice,
+      dynamic_runtime_params_slice,
+      geo,
+      n_e_cell_variable,
+      T_e_cell_variable,
   )
   n_e = n_e_cell_variable.value
-  n_i = n_i.value
-  n_impurity = n_impurity.value
+  n_i = ions.n_i.value
+  n_impurity = ions.n_impurity.value
 
   return {
       'T_i': T_i,
@@ -129,24 +131,15 @@ def get_prescribed_core_profile_values(
       'n_e': n_e,
       'n_i': n_i,
       'n_impurity': n_impurity,
-      'Z_i': Z_i,
-      'Z_i_face': Z_i_face,
-      'Z_impurity': Z_impurity,
-      'Z_impurity_face': Z_impurity_face,
+      'Z_i': ions.Z_i,
+      'Z_i_face': ions.Z_i_face,
+      'Z_impurity': ions.Z_impurity,
+      'Z_impurity_face': ions.Z_impurity_face,
+      'A_i': ions.A_i,
+      'A_impurity': ions.A_impurity,
+      'Z_eff': ions.Z_eff,
+      'Z_eff_face': ions.Z_eff_face,
   }
-
-
-def _get_update(
-    x_new: tuple[cell_variable.CellVariable, ...],
-    evolving_names: tuple[str, ...],
-    core_profiles: state.CoreProfiles,
-    var: str,
-):
-  """If variable `var` is evolving, return its new value stored in x_new."""
-  if var in evolving_names:
-    return x_new[evolving_names.index(var)]
-  # `var` is not evolving, so its new value is just its old value
-  return getattr(core_profiles, var)
 
 
 @functools.partial(
@@ -180,148 +173,171 @@ def update_core_profiles_during_step(
     evolving_names: The names of the evolving variables.
   """
 
-  T_i = _get_update(x_new, evolving_names, core_profiles, 'T_i')
-  T_e = _get_update(x_new, evolving_names, core_profiles, 'T_e')
-  psi = _get_update(x_new, evolving_names, core_profiles, 'psi')
-  n_e = _get_update(x_new, evolving_names, core_profiles, 'n_e')
+  updated_core_profiles = convertors.solver_x_tuple_to_core_profiles(
+      x_new, evolving_names, core_profiles
+  )
 
-  n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_impurity_face = (
-      getters.get_ion_density_and_charge_states(
-          static_runtime_params_slice,
-          dynamic_runtime_params_slice,
-          geo,
-          n_e,
-          T_e,
-      )
+  ions = getters.get_updated_ions(
+      static_runtime_params_slice,
+      dynamic_runtime_params_slice,
+      geo,
+      updated_core_profiles.n_e,
+      updated_core_profiles.T_e,
   )
 
   return dataclasses.replace(
-      core_profiles,
-      T_i=T_i,
-      T_e=T_e,
-      psi=psi,
-      n_e=n_e,
-      n_i=n_i,
-      n_impurity=n_impurity,
-      Z_i=Z_i,
-      Z_i_face=Z_i_face,
-      Z_impurity=Z_impurity,
-      Z_impurity_face=Z_impurity_face,
-      q_face=psi_calculations.calc_q_face(geo, psi),
-      s_face=psi_calculations.calc_s_face(geo, psi),
+      updated_core_profiles,
+      n_i=ions.n_i,
+      n_impurity=ions.n_impurity,
+      Z_i=ions.Z_i,
+      Z_i_face=ions.Z_i_face,
+      Z_impurity=ions.Z_impurity,
+      Z_impurity_face=ions.Z_impurity_face,
+      A_i=ions.A_i,
+      A_impurity=ions.A_impurity,
+      Z_eff=ions.Z_eff,
+      Z_eff_face=ions.Z_eff_face,
+      q_face=psi_calculations.calc_q_face(geo, updated_core_profiles.psi),
+      s_face=psi_calculations.calc_s_face(geo, updated_core_profiles.psi),
   )
 
 
-@functools.partial(
-    jax_utils.jit,
-    static_argnames=[
-        'static_runtime_params_slice',
-        'evolving_names',
-    ],
-)
-def update_all_core_profiles_after_step(
+def update_core_and_source_profiles_after_step(
+    dt: array_typing.ScalarFloat,
     x_new: tuple[cell_variable.CellVariable, ...],
     static_runtime_params_slice: runtime_params_slice.StaticRuntimeParamsSlice,
     dynamic_runtime_params_slice_t_plus_dt: runtime_params_slice.DynamicRuntimeParamsSlice,
     geo: geometry.Geometry,
-    source_profiles: source_profiles_lib.SourceProfiles,
     core_profiles_t: state.CoreProfiles,
     core_profiles_t_plus_dt: state.CoreProfiles,
+    explicit_source_profiles: source_profiles_lib.SourceProfiles,
+    source_models: source_models_lib.SourceModels,
+    neoclassical_models: neoclassical_models_lib.NeoclassicalModels,
     evolving_names: tuple[str, ...],
-    dt: array_typing.ScalarFloat,
-) -> state.CoreProfiles:
-  """Returns a new core profiles after the solver has finished.
+) -> tuple[state.CoreProfiles, source_profiles_lib.SourceProfiles]:
+  """Returns a core profiles and source profiles after the solver has finished.
 
   Updates the evolved variables and derived variables like q_face, psidot, etc.
 
   Args:
+    dt: The size of the last timestep.
     x_new: The new values of the evolving variables.
     static_runtime_params_slice: The static runtime params slice.
     dynamic_runtime_params_slice_t_plus_dt: The dynamic runtime params slice.
     geo: Magnetic geometry.
-    source_profiles: The source profiles from the step function output.
     core_profiles_t: The old set of core plasma profiles.
     core_profiles_t_plus_dt: The partially new set of core plasma profiles. On
       input into this function, all prescribed profiles and used boundary
       conditions are already set. But evolving values are not.
+    explicit_source_profiles: The explicit source profiles.
+    source_models: The source models.
+    neoclassical_models: The neoclassical models.
     evolving_names: The names of the evolving variables.
-    dt: The size of the last timestep.
+
+  Returns:
+    A tuple of the new core profiles and the source profiles.
   """
 
-  T_i = _get_update(
-      x_new, evolving_names, core_profiles_t_plus_dt, 'T_i'
-  )
-  T_e = _get_update(
-      x_new, evolving_names, core_profiles_t_plus_dt, 'T_e'
-  )
-  psi = _get_update(x_new, evolving_names, core_profiles_t_plus_dt, 'psi')
-  n_e = _get_update(x_new, evolving_names, core_profiles_t_plus_dt, 'n_e')
-
-  n_i, n_impurity, Z_i, Z_i_face, Z_impurity, Z_impurity_face = (
-      getters.get_ion_density_and_charge_states(
-          static_runtime_params_slice,
-          dynamic_runtime_params_slice_t_plus_dt,
-          geo,
-          n_e,
-          T_e,
-      )
+  updated_core_profiles_t_plus_dt = convertors.solver_x_tuple_to_core_profiles(
+      x_new, evolving_names, core_profiles_t_plus_dt
   )
 
-  psi_sources = source_profiles.total_psi_sources(geo)
+  ions = getters.get_updated_ions(
+      static_runtime_params_slice,
+      dynamic_runtime_params_slice_t_plus_dt,
+      geo,
+      updated_core_profiles_t_plus_dt.n_e,
+      updated_core_profiles_t_plus_dt.T_e,
+  )
 
-  vloop_lcfs = (
-      dynamic_runtime_params_slice_t_plus_dt.profile_conditions.vloop_lcfs  # pylint: disable=g-long-ternary
-      if static_runtime_params_slice.profile_conditions.use_vloop_lcfs_boundary_condition
-      else _update_vloop_lcfs_from_psi(
+  v_loop_lcfs = (
+      dynamic_runtime_params_slice_t_plus_dt.profile_conditions.v_loop_lcfs  # pylint: disable=g-long-ternary
+      if static_runtime_params_slice.profile_conditions.use_v_loop_lcfs_boundary_condition
+      else _update_v_loop_lcfs_from_psi(
           core_profiles_t.psi,
-          psi,
+          updated_core_profiles_t_plus_dt.psi,
           dt,
       )
   )
+
+  j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
+      geo,
+      updated_core_profiles_t_plus_dt.psi,
+  )
+
+  # A wholly new core profiles object is defined as a guard against neglecting
+  # to update one of the attributes if doing dataclasses.replace
+  intermediate_core_profiles = state.CoreProfiles(
+      T_i=updated_core_profiles_t_plus_dt.T_i,
+      T_e=updated_core_profiles_t_plus_dt.T_e,
+      psi=updated_core_profiles_t_plus_dt.psi,
+      n_e=updated_core_profiles_t_plus_dt.n_e,
+      n_i=ions.n_i,
+      n_impurity=ions.n_impurity,
+      Z_i=ions.Z_i,
+      Z_i_face=ions.Z_i_face,
+      Z_impurity=ions.Z_impurity,
+      Z_impurity_face=ions.Z_impurity_face,
+      psidot=core_profiles_t_plus_dt.psidot,
+      q_face=psi_calculations.calc_q_face(
+          geo, updated_core_profiles_t_plus_dt.psi
+      ),
+      s_face=psi_calculations.calc_s_face(
+          geo, updated_core_profiles_t_plus_dt.psi
+      ),
+      A_i=ions.A_i,
+      A_impurity=ions.A_impurity,
+      Z_eff=ions.Z_eff,
+      Z_eff_face=ions.Z_eff_face,
+      v_loop_lcfs=v_loop_lcfs,
+      sigma=core_profiles_t_plus_dt.sigma,  # Not yet updated
+      sigma_face=core_profiles_t_plus_dt.sigma_face,  # Not yet updated
+      j_total=j_total,
+      j_total_face=j_total_face,
+      Ip_profile_face=Ip_profile_face,
+  )
+
+  conductivity = neoclassical_models.conductivity.calculate_conductivity(
+      geo, intermediate_core_profiles
+  )
+
+  intermediate_core_profiles = dataclasses.replace(
+      intermediate_core_profiles,
+      sigma=conductivity.sigma,
+      sigma_face=conductivity.sigma_face,
+  )
+
+  # build_source_profiles calculates the union with explicit + implicit
+  total_source_profiles = source_profile_builders.build_source_profiles(
+      static_runtime_params_slice=static_runtime_params_slice,
+      dynamic_runtime_params_slice=dynamic_runtime_params_slice_t_plus_dt,
+      geo=geo,
+      source_models=source_models,
+      neoclassical_models=neoclassical_models,
+      core_profiles=intermediate_core_profiles,
+      explicit=False,
+      explicit_source_profiles=explicit_source_profiles,
+      conductivity=conductivity,
+  )
+  psi_sources = total_source_profiles.total_psi_sources(geo)
 
   psidot = dataclasses.replace(
       core_profiles_t_plus_dt.psidot,
       value=psi_calculations.calculate_psidot_from_psi_sources(
           psi_sources=psi_sources,
-          sigma=core_profiles_t_plus_dt.sigma,
-          sigma_face=core_profiles_t_plus_dt.sigma_face,
+          sigma=intermediate_core_profiles.sigma,
           resistivity_multiplier=dynamic_runtime_params_slice_t_plus_dt.numerics.resistivity_multiplier,
-          psi=psi,
+          psi=intermediate_core_profiles.psi,
           geo=geo,
       ),
-      right_face_constraint=vloop_lcfs,
+      right_face_constraint=v_loop_lcfs,
       right_face_grad_constraint=None,
   )
-
-  j_total, j_total_face, Ip_profile_face = psi_calculations.calc_j_total(
-      geo, psi
-  )
-
-  return state.CoreProfiles(
-      T_i=T_i,
-      T_e=T_e,
-      psi=psi,
-      n_e=n_e,
-      n_i=n_i,
-      n_impurity=n_impurity,
-      Z_i=Z_i,
-      Z_i_face=Z_i_face,
-      Z_impurity=Z_impurity,
-      Z_impurity_face=Z_impurity_face,
+  core_profiles_t_plus_dt = dataclasses.replace(
+      intermediate_core_profiles,
       psidot=psidot,
-      q_face=psi_calculations.calc_q_face(geo, psi),
-      s_face=psi_calculations.calc_s_face(geo, psi),
-      density_reference=core_profiles_t_plus_dt.density_reference,
-      A_i=core_profiles_t_plus_dt.A_i,
-      A_impurity=core_profiles_t_plus_dt.A_impurity,
-      vloop_lcfs=vloop_lcfs,
-      # These have already been updated in the solver.
-      sigma=core_profiles_t_plus_dt.sigma,
-      sigma_face=core_profiles_t_plus_dt.sigma_face,
-      j_total=j_total,
-      j_total_face=j_total_face,
-      Ip_profile_face=Ip_profile_face,
   )
+  return core_profiles_t_plus_dt, total_source_profiles
 
 
 def compute_boundary_conditions_for_t_plus_dt(
@@ -339,16 +355,14 @@ def compute_boundary_conditions_for_t_plus_dt(
     static_runtime_params_slice: Static (concrete) runtime parameters
     dynamic_runtime_params_slice_t: Dynamic runtime parameters for the current
       timestep. Will not be used if
-      dynamic_runtime_params_slice_t_plus_dt.profile_conditions.vloop_lcfs is
-      None, i.e. if the dirichlet psi boundary condition based on Ip is
-      used
+      dynamic_runtime_params_slice_t_plus_dt.profile_conditions.v_loop_lcfs is
+      None, i.e. if the dirichlet psi boundary condition based on Ip is used
     dynamic_runtime_params_slice_t_plus_dt: Dynamic runtime parameters for the
       next timestep
     geo_t_plus_dt: Geometry object for the next timestep
     core_profiles_t: Core profiles at the current timestep. Will not be used if
-      dynamic_runtime_params_slice_t_plus_dt.profile_conditions.vloop_lcfs is
-      None, i.e. if the dirichlet psi boundary condition based on Ip is
-      used
+      dynamic_runtime_params_slice_t_plus_dt.profile_conditions.v_loop_lcfs is
+      None, i.e. if the dirichlet psi boundary condition based on Ip is used
 
   Returns:
     Mapping from State attribute names to dictionaries updating attributes of
@@ -362,7 +376,6 @@ def compute_boundary_conditions_for_t_plus_dt(
   # core profile calculation.
   n_e = getters.get_updated_electron_density(
       static_runtime_params_slice,
-      dynamic_runtime_params_slice_t_plus_dt.numerics,
       profile_conditions_t_plus_dt,
       geo_t_plus_dt,
   )
@@ -422,18 +435,18 @@ def compute_boundary_conditions_for_t_plus_dt(
                   Ip=profile_conditions_t_plus_dt.Ip,
                   geo=geo_t_plus_dt,
               )
-              if not static_runtime_params_slice.profile_conditions.use_vloop_lcfs_boundary_condition
+              if not static_runtime_params_slice.profile_conditions.use_v_loop_lcfs_boundary_condition
               else None
           ),
           right_face_constraint=(
-              _calculate_psi_value_constraint_from_vloop(  # pylint: disable=g-long-ternary
+              _calculate_psi_value_constraint_from_v_loop(  # pylint: disable=g-long-ternary
                   dt=dt,
-                  vloop_lcfs_t=dynamic_runtime_params_slice_t.profile_conditions.vloop_lcfs,
-                  vloop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.vloop_lcfs,
+                  v_loop_lcfs_t=dynamic_runtime_params_slice_t.profile_conditions.v_loop_lcfs,
+                  v_loop_lcfs_t_plus_dt=profile_conditions_t_plus_dt.v_loop_lcfs,
                   psi_lcfs_t=core_profiles_t.psi.right_face_constraint,
                   theta=static_runtime_params_slice.solver.theta_implicit,
               )
-              if static_runtime_params_slice.profile_conditions.use_vloop_lcfs_boundary_condition
+              if static_runtime_params_slice.profile_conditions.use_v_loop_lcfs_boundary_condition
               else None
           ),
       ),
@@ -522,24 +535,28 @@ def provide_core_profiles_t_plus_dt(
       Z_i_face=Z_i_face,
       Z_impurity=updated_values['Z_impurity'],
       Z_impurity_face=Z_impurity_face,
+      A_i=updated_values['A_i'],
+      A_impurity=updated_values['A_impurity'],
+      Z_eff=updated_values['Z_eff'],
+      Z_eff_face=updated_values['Z_eff_face'],
   )
   return core_profiles_t_plus_dt
 
 
 # TODO(b/406173731): Find robust solution for underdetermination and solve this
 # for general theta_implicit values.
-def _update_vloop_lcfs_from_psi(
+def _update_v_loop_lcfs_from_psi(
     psi_t: cell_variable.CellVariable,
     psi_t_plus_dt: cell_variable.CellVariable,
     dt: array_typing.ScalarFloat,
 ) -> jax.Array:
-  """Updates the vloop_lcfs for the next timestep.
+  """Updates the v_loop_lcfs for the next timestep.
 
-  For the Ip boundary condition case, the vloop_lcfs formula is in principle
+  For the Ip boundary condition case, the v_loop_lcfs formula is in principle
   calculated from:
 
   (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt =
-    vloop_lcfs_t_plus_dt*theta_implicit - vloop_lcfs_t*(1-theta_implicit)
+    v_loop_lcfs_t_plus_dt*theta_implicit - v_loop_lcfs_t*(1-theta_implicit)
 
   However this set of equations is underdetermined. We thus restrict this
   calculation assuming a fully implicit system, i.e. theta_implicit=1, which is
@@ -552,9 +569,9 @@ def _update_vloop_lcfs_from_psi(
     dt: The size of the last timestep.
 
   Returns:
-    The updated vloop_lcfs for the next timestep.
+    The updated v_loop_lcfs for the next timestep.
   """
   psi_lcfs_t = psi_t.face_value()[-1]
   psi_lcfs_t_plus_dt = psi_t_plus_dt.face_value()[-1]
-  vloop_lcfs_t_plus_dt = (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt
-  return vloop_lcfs_t_plus_dt
+  v_loop_lcfs_t_plus_dt = (psi_lcfs_t_plus_dt - psi_lcfs_t) / dt
+  return v_loop_lcfs_t_plus_dt

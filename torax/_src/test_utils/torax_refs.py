@@ -25,7 +25,8 @@ from torax._src.geometry import geometry_provider as geometry_provider_lib
 from torax._src.torax_pydantic import model_config
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class References:
   """Collection of reference values useful for unit tests."""
 

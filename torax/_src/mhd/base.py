@@ -18,8 +18,15 @@ import chex
 from torax._src.mhd.sawtooth import sawtooth_model
 
 
-@chex.dataclass
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
 class MHDModels:
   """Container for instantiated MHD model objects."""
 
-  sawtooth: sawtooth_model.SawtoothModel | None = None
+  sawtooth_models: sawtooth_models_lib.SawtoothModels | None = None
+
+  def __eq__(self, other: 'MHDModels') -> bool:
+    return self.sawtooth_models == other.sawtooth_models
+
+  def __hash__(self) -> int:
+    return hash((self.sawtooth_models,))

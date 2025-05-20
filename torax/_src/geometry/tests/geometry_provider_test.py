@@ -1,5 +1,11 @@
 import dataclasses
 
+from absl.testing import absltest
+import numpy as np
+from torax._src.geometry import geometry
+from torax._src.geometry import geometry_provider
+from torax._src.geometry import pydantic_model as geometry_pydantic_model
+
 # Copyright 2024 DeepMind Technologies Limited
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +25,6 @@ import numpy as np
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry_provider
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
-
 
 class GeometryProviderTest(absltest.TestCase):
 

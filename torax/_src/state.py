@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Classes defining the TORAX state that evolves over time."""
+import dataclasses
 import enum
 from typing import Optional
 
@@ -26,9 +27,8 @@ from torax._src.geometry import geometry
 import typing_extensions
 
 # pylint: disable=invalid-name
-
-
-@chex.dataclass(frozen=True, eq=False)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True, eq=False)
 class CoreProfiles:
   """Dataclass for holding the evolving core plasma profiles.
 
@@ -43,18 +43,19 @@ class CoreProfiles:
       T_e: Electron temperature [keV].
       psi: Poloidal flux [Wb].
       psidot: Time derivative of poloidal flux (loop voltage) [V].
-      n_e: Electron density [density_reference m^-3].
-      n_i: Main ion density [density_reference m^-3].
-      n_impurity: Impurity density [density_reference m^-3].
+      n_e: Electron density [m^-3].
+      n_i: Main ion density [m^-3].
+      n_impurity: Impurity density [m^-3].
       q_face: Safety factor.
       s_face: Magnetic shear.
-      density_reference: Reference density [m^-3].
-      vloop_lcfs: Loop voltage at LCFS (V).
+      v_loop_lcfs: Loop voltage at LCFS (V).
       Z_i: Main ion charge on cell grid [dimensionless].
       Z_i_face: Main ion charge on face grid [dimensionless].
       A_i: Main ion mass [amu].
       Z_impurity: Impurity charge on cell grid [dimensionless].
       Z_impurity_face: Impurity charge on face grid [dimensionless].
+      Z_eff: Effective charge on cell grid [dimensionless].
+      Z_eff_face: Effective charge on face grid [dimensionless].
       A_impurity: Impurity mass [amu].
       sigma: Conductivity on cell grid [S/m].
       sigma_face: Conductivity on face grid [S/m].
@@ -72,14 +73,15 @@ class CoreProfiles:
   n_impurity: cell_variable.CellVariable
   q_face: array_typing.ArrayFloat
   s_face: array_typing.ArrayFloat
-  density_reference: array_typing.ScalarFloat
-  vloop_lcfs: array_typing.ScalarFloat
+  v_loop_lcfs: array_typing.ScalarFloat
   Z_i: array_typing.ArrayFloat
   Z_i_face: array_typing.ArrayFloat
   A_i: array_typing.ScalarFloat
   Z_impurity: array_typing.ArrayFloat
   Z_impurity_face: array_typing.ArrayFloat
   A_impurity: array_typing.ScalarFloat
+  Z_eff: array_typing.ArrayFloat
+  Z_eff_face: array_typing.ArrayFloat
   sigma: array_typing.ArrayFloat
   sigma_face: array_typing.ArrayFloat
   j_total: array_typing.ArrayFloat
@@ -119,28 +121,15 @@ class CoreProfiles:
     """
 
 
-@chex.dataclass
+# TODO(b/426132633): restructure and rename attributes for V2. Choices were made
+# when refactoring to avoid breaking public API.
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
 class CoreTransport:
   """Coefficients for the plasma transport.
 
-  These coefficients are computed by TORAX transport models. See the
-  transport_model/ folder for more info.
-
-  NOTE: The naming of this class is inspired by the IMAS `core_transport` IDS,
-  but its schema is not a 1:1 mapping to that IDS.
-
-  Attributes:
-    chi_face_ion: Ion heat conductivity, on the face grid.
-    chi_face_el: Electron heat conductivity, on the face grid.
-    d_face_el: Diffusivity of electron density, on the face grid.
-    v_face_el: Convection strength of electron density, on the face grid.
-    chi_face_el_bohm: (Optional) Bohm contribution for electron heat
-      conductivity.
-    chi_face_el_gyrobohm: (Optional) GyroBohm contribution for electron heat
-      conductivity.
-    chi_face_ion_bohm: (Optional) Bohm contribution for ion heat conductivity.
-    chi_face_ion_gyrobohm: (Optional) GyroBohm contribution for ion heat
-      conductivity.
+  See docstrings of `neoclassical/transport/base.py` and
+  `transport_model/transport_model.py` for more details.
   """
 
   chi_face_ion: jax.Array
@@ -151,17 +140,33 @@ class CoreTransport:
   chi_face_el_gyrobohm: Optional[jax.Array] = None
   chi_face_ion_bohm: Optional[jax.Array] = None
   chi_face_ion_gyrobohm: Optional[jax.Array] = None
+  chi_neo_i: Optional[jax.Array] = None
+  chi_neo_e: Optional[jax.Array] = None
+  D_neo_e: Optional[jax.Array] = None
+  V_neo_e: Optional[jax.Array] = None
+  V_neo_ware_e: Optional[jax.Array] = None
 
   def __post_init__(self):
-    # Use the array size of chi_face_el as a reference.
+    # Use the array size of chi_face_el as a template.
+    template = self.chi_face_el
     if self.chi_face_el_bohm is None:
-      self.chi_face_el_bohm = jnp.zeros_like(self.chi_face_el)
+      self.chi_face_el_bohm = jnp.zeros_like(template)
     if self.chi_face_el_gyrobohm is None:
-      self.chi_face_el_gyrobohm = jnp.zeros_like(self.chi_face_el)
+      self.chi_face_el_gyrobohm = jnp.zeros_like(template)
     if self.chi_face_ion_bohm is None:
-      self.chi_face_ion_bohm = jnp.zeros_like(self.chi_face_el)
+      self.chi_face_ion_bohm = jnp.zeros_like(template)
     if self.chi_face_ion_gyrobohm is None:
-      self.chi_face_ion_gyrobohm = jnp.zeros_like(self.chi_face_el)
+      self.chi_face_ion_gyrobohm = jnp.zeros_like(template)
+    if self.chi_neo_i is None:
+      self.chi_neo_i = jnp.zeros_like(template)
+    if self.chi_neo_e is None:
+      self.chi_neo_e = jnp.zeros_like(template)
+    if self.D_neo_e is None:
+      self.D_neo_e = jnp.zeros_like(template)
+    if self.V_neo_e is None:
+      self.V_neo_e = jnp.zeros_like(template)
+    if self.V_neo_ware_e is None:
+      self.V_neo_ware_e = jnp.zeros_like(template)
 
   def chi_max(
       self,
@@ -176,8 +181,8 @@ class CoreTransport:
       chi_max: Maximum value of chi.
     """
     return jnp.maximum(
-        jnp.max(self.chi_face_ion * geo.g1_over_vpr2_face),
-        jnp.max(self.chi_face_el * geo.g1_over_vpr2_face),
+        jnp.max((self.chi_face_ion + self.chi_neo_i) * geo.g1_over_vpr2_face),
+        jnp.max((self.chi_face_el + self.chi_neo_e) * geo.g1_over_vpr2_face),
     )
 
   @classmethod
@@ -193,16 +198,22 @@ class CoreTransport:
         chi_face_el_gyrobohm=jnp.zeros(shape),
         chi_face_ion_bohm=jnp.zeros(shape),
         chi_face_ion_gyrobohm=jnp.zeros(shape),
+        chi_neo_i=jnp.zeros(shape),
+        chi_neo_e=jnp.zeros(shape),
+        D_neo_e=jnp.zeros(shape),
+        V_neo_e=jnp.zeros(shape),
+        V_neo_ware_e=jnp.zeros(shape),
     )
 
 
-@chex.dataclass
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
 class SolverNumericOutputs:
   """Numerical quantities related to the solver.
 
   Attributes:
-    outer_solver_iterations: Number of iterations performed in the outer loop
-      of the solver.
+    outer_solver_iterations: Number of iterations performed in the outer loop of
+      the solver.
     solver_error_state: 0 if solver converged with fine tolerance for this step
       1 if solver did not converge for this step (was above coarse tol) 2 if
       solver converged within coarse tolerance. Allowed to pass with a warning.
@@ -227,6 +238,7 @@ class SimError(enum.Enum):
   NAN_DETECTED = 1
   QUASINEUTRALITY_BROKEN = 2
   NEGATIVE_CORE_PROFILES = 3
+  REACHED_MIN_DT = 4
 
   def log_error(self):
     match self:
@@ -244,6 +256,10 @@ class SimError(enum.Enum):
             Simulation stopped due to quasineutrality being violated.
             Possible cause is bad handling of impurity species.
             Output file contains all profiles up to the last valid step.
+            """)
+      case SimError.REACHED_MIN_DT:
+        logging.error("""
+            Simulation stopped because the adaptive time step became too small.
             """)
       case SimError.NO_ERROR:
         pass

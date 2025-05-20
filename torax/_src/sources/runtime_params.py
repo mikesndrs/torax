@@ -13,12 +13,12 @@
 # limitations under the License.
 
 """Configuration for all the sources/sinks modelled in Torax."""
+import dataclasses
 import enum
 
 import chex
 from torax._src import array_typing
 from torax._src import interpolated_param
-
 
 TimeInterpolatedInput = interpolated_param.TimeInterpolatedInput
 
@@ -40,7 +40,8 @@ class Mode(enum.Enum):
   PRESCRIBED = "PRESCRIBED"
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams:
   """Dynamic params for a single TORAX source.
 
@@ -48,10 +49,12 @@ class DynamicRuntimeParams:
   stateless, so these params are their inputs to determine their output
   profiles.
   """
+
   prescribed_values: tuple[array_typing.ArrayFloat, ...]
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class StaticRuntimeParams:
   """Static params for the sources."""
 

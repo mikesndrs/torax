@@ -15,162 +15,64 @@
 """Useful functions for handling of IMAS IDSs and converts them into TORAX
 objects"""
 import datetime
-import importlib
 import os
-from typing import Any
+import pathlib
 
-import yaml
-
-try:
-    import imas
-    from imas.ids_toplevel import IDSToplevel
-except ImportError:
-    IDSToplevel = Any
+from imas import DBEntry
+from imas.ids_toplevel import IDSToplevel
 
 
-def requires_module(module_name: str):
-    """
-    Decorator that checks if a module can be imported.
-    Returns the function if the module is available,
-    otherwise raises an ImportError.
-    """
-
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            if importlib.util.find_spec(module_name) is None:
-                raise ImportError(
-                    f"Required module '{module_name}' is not installed. "
-                    "Make sure you install the needed optional dependencies."
-                )
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-@requires_module("imas_core")
 def save_netCDF(
-    directory_path: str | None,
+    directory_path: str | pathlib.Path | None,
     file_name: str | None,
-    IDS: IDSToplevel,
+    ids: IDSToplevel,
 ):
-    """Generates a netcdf file from an IDS.
+  """Generates a netcdf file from an IDS.
 
-    Args:
-      directory_path: Directory where to save the netCDF output file. If None,
-        it will be saved in data/third_party/geo.
-      file_name: Desired output file name.
-        If None will default to IDS_file_ + Time.
-      IDS: IMAS Interface Data Structure object that will be written in the
-        IMAS netCDF file.
-
-    Returns:
-      None
-    """
-    if directory_path is None:
-        directory_path = "torax/data/third_party/geo"
-    if file_name is None:
-        date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = "IDS_file_" + date_str
-    filepath = os.path.join(directory_path, file_name) + ".nc"
-    with imas.DBEntry(filepath, "w") as netcdf_entry:
-        netcdf_entry.put(IDS)
-
-
-@requires_module("imas_core")
-def load_ids_from_Data_entry(file_path: str, ids_name: str) -> IDSToplevel:
-    """Loads the IDS for a single time slice from a specific data
-    entry / scenario using the IMAS Access Layer
-
-    Args:
-      file_path: Absolute path to the yaml file containing the DB
-      specifications of the desired IDS : input_database, shot, run,
-        input_user_or_path and time_begin for the desired time_slice
-      ids_name: name of IDS to load
-
-    Returns:
-      IDS"""
-    file = open(file_path, "r")
-    scenario = yaml.load(file, Loader=yaml.CLoader)
-    file.close()
-    if scenario["scenario_backend"] == "hdf5":
-        sc_backend = imas.ids_defs.HDF5_BACKEND
-    else:
-        sc_backend = imas.ids_defs.MDSPLUS_BACKEND
-    input = imas.DBEntry(
-        sc_backend,
-        scenario["input_database"],
-        scenario["shot"],
-        scenario["run_in"],
-        scenario["input_user_or_path"],
-    )
-    input.open()
-    timenow = scenario["time_begin"]
-    IMAS_data = input.get_slice(ids_name, timenow, 1)
-
-    return IMAS_data
-
-
-def load_IDS_from_netCDF(file_path: str, ids_name: str) -> IDSToplevel:
-    """Loads an IDS for a single time slice from an IMAS netCDF
-    file path"""
-    input = imas.DBEntry(file_path, "r")
-    ids = input.get(ids_name)
-    return ids
-
-
-@requires_module("imas_core")
-def load_IDS_from_hdf5(directory_path: str, ids_name: str) -> IDSToplevel:
-    """Loads an IDS for a single time slice from the path of a
-    local directory containing it stored with hdf5 backend. The repository must
-    contain the master.h5 file."""
-    imasuri = "imas:hdf5?path=" + directory_path
-    input = imas.DBEntry(imasuri, "r")
-    ids = input.get(ids_name)
-    return ids
-
-
-def load_IMAS_data(path: str, ids_name: str) -> IDSToplevel:
-    """Loads an IDS for a single time slice either from a netCDF
-    file path or from an hdf5 file in the given directory path."""
-    if path[-3:] == ".nc":
-        return load_IDS_from_netCDF(file_path=path, ids_name=ids_name)
-    else:
-        return load_IDS_from_hdf5(directory_path=path, ids_name=ids_name)
-
-
-def update_dict(old_dict:dict, updates:dict) -> dict:
-  """Recursively modify the fields from the original dict old_dict using the values contained in updates dict.
-  Used to update config dict fields more easily. Use case is to update config dict with output from core_profiles.core_profiles_from_IMAS().
   Args:
-    old_dict: The current dict that needs to be updated.
-    updates: Dict containing the values of the keys that need to be updated in old_dict.
+    directory_path: Directory where to save the netCDF output file. If None,
+      it will be saved in data/third_party/geo.
+    file_name: Desired output file name.
+      If None will default to IDS_file_ + Time.
+    ids: IMAS Interface Data Structure object that will be written in the
+      IMAS netCDF file.
 
   Returns:
-    New updated copy of the dict.
+    None
   """
-  new_dict = old_dict.copy()
-  for key, value in updates.items():
-      if isinstance(value, dict) and key in new_dict and isinstance(new_dict[key], dict):
-          if all(isinstance(k, float) for k in value.keys()):
-            new_dict[key] = value #Needed to replace completely the time slices profiles, instead of keeping the initial ones.
-          else:
-            new_dict[key] = update_dict(new_dict[key], value)
-      else:
-          new_dict[key] = value
-  return new_dict
+  from torax._src.config.config_loader import torax_path
+
+  directory_path = (
+      pathlib.Path(directory_path)
+      if isinstance(directory_path, str)
+      else directory_path
+  )
+  if not directory_path.is_dir():
+    # Checks that the directory can be found.
+    new_path = torax_path().joinpath(directory_path)
+    if not new_path.is_dir():
+      raise ValueError(
+          f"Directory {directory_path} could not be found. If it is a relative"
+          " path, it could not be resolved relative to the working directory"
+          f" {os.getcwd()} or the Torax directory {torax_path()}."
+      )
+    directory_path = new_path
+
+  if directory_path is None:
+    directory_path = torax_path().joinpath("torax/data/third_party/geo")
+  if file_name is None:
+    date_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    file_name = "IDS_file_" + date_str
+  filepath = os.path.join(directory_path, file_name) + ".nc"
+  with DBEntry(uri=filepath, mode="w") as netcdf_entry:
+    netcdf_entry.put(ids=ids)
+    print(f"Successfully saved file {filepath}")
 
 
-
-# todo check if we can copy form geometry without weird dependency loops
-def face_to_cell(face):
-    """Infers cell values corresponding to a vector of face values.
-    Args:
-      face: An array containing face values.
-
-    Returns:
-      cell: An array containing cell values.
-    """
-
-    return 0.5 * (face[:-1] + face[1:])
+def load_IMAS_data(uri: str, ids_name: str) -> IDSToplevel:
+  """
+  Loads a full IDS for a given uri or path_name and a given ids_name.
+  """
+  with DBEntry(uri=uri, mode="r") as db:
+    ids = db.get(ids_name=ids_name)
+  return ids

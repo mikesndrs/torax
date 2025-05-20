@@ -14,7 +14,8 @@
 
 """The CellVariable class.
 
-A chex dataclass used to represent variables on meshes for the 1D fvm solver.
+A jax_utils.jax_dataclass used to represent variables on meshes for the 1D fvm
+solver.
 Naming conventions and API are similar to those developed in the FiPy fvm solver
 [https://www.ctcms.nist.gov/fipy/]
 """
@@ -25,6 +26,7 @@ import jax
 from jax import numpy as jnp
 import jaxtyping as jt
 from torax._src import array_typing
+import typing_extensions
 
 
 def _zero() -> array_typing.ScalarFloat:
@@ -50,6 +52,7 @@ class CellVariable:
     right_face_grad_constraint: A jax scalar specifying the undetermined value
       of the gradient on the rightmost face variable.
   """
+
   # t* means match 0 or more leading time dimensions.
   value: jt.Float[chex.Array, 't* cell']
   dr: jt.Float[chex.Array, 't*']
@@ -76,7 +79,10 @@ class CellVariable:
     `__post_init__` could in principle make changes.
     """
     # Automatically check dtypes of all numeric fields
-    for name, value in self.items():
+
+    for field in dataclasses.fields(self):
+      value = getattr(self, field.name)
+      name = field.name
       if isinstance(value, jax.Array):
         if value.dtype != jnp.float64 and jax.config.read('jax_enable_x64'):
           raise TypeError(
@@ -231,13 +237,9 @@ class CellVariable:
   def __str__(self) -> str:
     output_string = f'CellVariable(value={self.value}'
     if self.left_face_constraint is not None:
-      output_string += (
-          f', left_face_constraint={self.left_face_constraint}'
-      )
+      output_string += f', left_face_constraint={self.left_face_constraint}'
     if self.right_face_constraint is not None:
-      output_string += (
-          f', right_face_constraint={self.right_face_constraint}'
-      )
+      output_string += f', right_face_constraint={self.right_face_constraint}'
     if self.left_face_grad_constraint is not None:
       output_string += (
           f', left_face_grad_constraint={self.left_face_grad_constraint}'
@@ -257,3 +259,10 @@ class CellVariable:
         [left_value, self.value, right_value],
         axis=-1,
     )
+
+  def __eq__(self, other: typing_extensions.Self) -> bool:
+    try:
+      chex.assert_trees_all_equal(self, other)
+      return True
+    except AssertionError:
+      return False

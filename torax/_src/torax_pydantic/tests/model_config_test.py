@@ -15,6 +15,7 @@ import copy
 import json
 import logging
 from typing import Any
+
 from absl.testing import absltest
 from absl.testing import parameterized
 import chex
@@ -107,7 +108,7 @@ class ConfigTest(parameterized.TestCase):
         chex.assert_trees_all_equal(mesh.face_centers, m.grid.face_centers)
         chex.assert_trees_all_equal(mesh.cell_centers, m.grid.cell_centers)
 
-  def test_config_safe_update(self):
+  def test_geometry_direct_nrho_hires_factor_update(self):
 
     config_dict = config_loader.import_module(
         "tests/test_data/test_iterhybrid_predictor_corrector.py",
@@ -147,11 +148,39 @@ class ConfigTest(parameterized.TestCase):
       self.assertLen(v1_cell, new_n_rho)
       self.assertLen(v1_face, new_n_rho + 1)
 
+  def test_n_rho_updated_from_full_geometry_dict_update(self):
+
+    config_dict = config_loader.import_module(
+        "tests/test_data/test_iterhybrid_predictor_corrector.py",
+    )["CONFIG"]
+    config_pydantic = model_config.ToraxConfig.from_dict(config_dict)
+
+    new_n_rho = config_pydantic.geometry.geometry_configs.config.n_rho * 2  # pytype: disable=attribute-error
+
+    config_pydantic.update_fields({
+        "geometry": {
+            "n_rho": new_n_rho,
+            "geometry_type": "circular",
+        },
+    })
+
+    self.assertEqual(
+        config_pydantic.geometry.geometry_configs.config.n_rho,  # pytype: disable=attribute-error
+        new_n_rho,
+    )
+
+    with self.subTest("nrho_updated_reset_mesh_cache"):
+      v1_cell = config_pydantic.plasma_composition.Z_eff.get_value(
+          t=0.2, grid_type="cell"
+      )
+      self.assertLen(v1_cell, new_n_rho)
+
   @parameterized.named_parameters(
       ("const_lin_no_per", "constant", "linear", None, False, False),
       ("qlknn_lin_no_per", "qlknn", "linear", None, False, True),
       ("cgm_lin_no_per", "CGM", "linear", None, False, True),
       ("qlknn_lin_per", "qlknn", "linear", None, True, False),
+      ("qualikiz_lin_per", "qualikiz", "linear", None, True, False),
       ("qlknn_newton_no_per_0", "qlknn", "newton_raphson", 0, False, False),
       ("qlknn_newton_no_per_1", "qlknn", "newton_raphson", 1, False, True),
       ("qlknn_newton_per_1", "qlknn", "newton_raphson", 1, True, False),

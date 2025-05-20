@@ -17,12 +17,10 @@ from unittest import mock
 from absl.testing import absltest
 from absl.testing import parameterized
 import chex
-from torax._src import constants
 from torax._src.config import build_runtime_params
 from torax._src.orchestration import initial_state
 from torax._src.orchestration import step_function
 from torax._src.output_tools import output
-from torax._src.sources import source_models as source_models_lib
 from torax._src.test_utils import core_profile_helpers
 from torax._src.test_utils import sim_test_case
 from torax._src.torax_pydantic import model_config
@@ -136,9 +134,6 @@ class InitialStateTest(sim_test_case.SimTestCase):
     )
 
     result = initial_state._get_initial_state(static, dynamic, geo, step_fn)
-    # Normalize the ref_profiles to the expected internal CoreProfiles units.
-    ref_profiles[output.N_E] /= constants.DENSITY_SCALING_FACTOR
-    ref_profiles[output.N_I] /= constants.DENSITY_SCALING_FACTOR
     core_profile_helpers.verify_core_profiles(
         ref_profiles, index, result.core_profiles
     )
@@ -146,9 +141,7 @@ class InitialStateTest(sim_test_case.SimTestCase):
 
 def _get_step_fn(torax_config):
   solver = mock.MagicMock()
-  solver.source_models = source_models_lib.SourceModels(
-      torax_config.sources, torax_config.neoclassical
-  )
+  solver.physics_models = torax_config.build_physics_models()
   return mock.create_autospec(step_function.SimulationStepFn, solver=solver)
 
 

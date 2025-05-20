@@ -155,7 +155,9 @@ class ChargeStatesTest(parameterized.TestCase):
               'W': 0.1,
           },
           [0.1, 2, 10],
-          [8.198074, 15.72704044, 19.718317],
+          # Calculated by calculating (in a Colab) <Z^2>/<Z> based on the
+          # non-mixture expected values, and provided mixture fractions
+          [9.42307536, 23.895752, 35.35459338],
       ),
   )
   def test_get_average_charge_state(
@@ -195,3 +197,7 @@ class ChargeStatesTest(parameterized.TestCase):
         ion_symbols, ion_mixture, T_e
     )
     np.testing.assert_allclose(Z_calculated, Z_override)
+
+
+if __name__ == '__main__':
+  absltest.main()

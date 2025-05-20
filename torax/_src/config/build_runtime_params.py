@@ -42,13 +42,8 @@ def build_static_params_from_config(
       },
       torax_mesh=config.geometry.build_provider.torax_mesh,
       solver=config.solver.build_static_params(),
-      evolve_ion_heat=config.numerics.evolve_ion_heat,
-      evolve_electron_heat=config.numerics.evolve_electron_heat,
-      evolve_current=config.numerics.evolve_current,
-      evolve_density=config.numerics.evolve_density,
       main_ion_names=config.plasma_composition.get_main_ion_names(),
       impurity_names=config.plasma_composition.get_impurity_names(),
-      adaptive_dt=config.numerics.adaptive_dt,
       profile_conditions=config.profile_conditions.build_static_params(),
   )
 
@@ -88,6 +83,11 @@ class DynamicRuntimeParamsSliceProvider:
     self._pedestal = torax_config.pedestal
     self._mhd = torax_config.mhd
     self._neoclassical = torax_config.neoclassical
+    self._time_step_calculator = torax_config.time_step_calculator
+
+  @property
+  def numerics(self) -> numerics_lib.Numerics:
+    return self._numerics
 
   @classmethod
   def from_config(
@@ -116,6 +116,7 @@ class DynamicRuntimeParamsSliceProvider:
         neoclassical=self._neoclassical.build_dynamic_params(),
         pedestal=self._pedestal.build_dynamic_params(t),
         mhd=self._mhd.build_dynamic_params(t),
+        time_step_calculator=self._time_step_calculator.build_dynamic_params(),
     )
 
 

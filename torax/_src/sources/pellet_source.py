@@ -28,7 +28,6 @@ from torax._src.sources import source
 from torax._src.sources import source_profiles
 from torax._src.torax_pydantic import torax_pydantic
 
-
 # Default value for the model function to be used for the pellet source
 # source. This is also used as an identifier for the model function in
 # the default source config for Pydantic to "discriminate" against.
@@ -54,10 +53,7 @@ def calc_pellet_source(
       formulas.gaussian_profile(
           center=dynamic_source_runtime_params.pellet_deposition_location,
           width=dynamic_source_runtime_params.pellet_width,
-          total=(
-              dynamic_source_runtime_params.S_total
-              / dynamic_runtime_params_slice.numerics.density_reference
-          ),
+          total=dynamic_source_runtime_params.S_total,
           geo=geo,
       ),
   )
@@ -79,7 +75,8 @@ class PelletSource(source.Source):
     return (source.AffectedCoreProfile.NE,)
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicPelletRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   pellet_width: array_typing.ScalarFloat
   pellet_deposition_location: array_typing.ScalarFloat

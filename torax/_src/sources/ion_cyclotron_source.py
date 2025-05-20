@@ -69,7 +69,8 @@ def _from_json(json_file) -> dict[str, Any]:
 # pylint: disable=invalid-name
 # Many of the variables below are named to match the physics quantities
 # as defined by the TORIC ICRF solver, so we keep their naming for consistency.
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class ToricNNInputs:
   """Inputs to the ToricNN model."""
 
@@ -98,7 +99,8 @@ class ToricNNInputs:
   B_0: array_typing.ScalarFloat
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class ToricNNOutputs:
   """Outputs from the ToricNN model."""
 
@@ -301,7 +303,8 @@ def _toric_nn_predict(
   )
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   frequency: array_typing.ScalarFloat
   minority_concentration: array_typing.ScalarFloat
@@ -320,9 +323,9 @@ def _helium3_tail_temperature(
   """Use a "Stix distribution" to estimate the tail temperature of He3."""
   helium3_mass = 3.016
   helium3_charge = 2
-  helium3_fraction = minority_concentration / 100  # Min conc provided in %.
+  helium3_fraction = minority_concentration
   absorbed_power_density = power_deposition_he3 * P_total
-  n_e20 = core_profiles.n_e.value * core_profiles.density_reference / 1e20
+  n_e20 = core_profiles.n_e.value / 1e20
   # Use a "Stix distribution" [Stix, Nuc. Fus. 1975] to model the non-thermal
   # He3 distribution based on an analytic solution to the FP equation.
   xi = (
@@ -373,8 +376,10 @@ def icrh_model_func(
   toric_inputs = ToricNNInputs(
       frequency=dynamic_source_runtime_params.frequency,
       volume_average_temperature=volume_average_temperature,
-      volume_average_density=volume_average_density,
-      minority_concentration=dynamic_source_runtime_params.minority_concentration,
+      volume_average_density=volume_average_density
+      / 1e20,  # convert to 10^20 m^-3
+      minority_concentration=dynamic_source_runtime_params.minority_concentration
+      * 100,  # Convert to percentage.
       gap_inner=gap_inner,
       gap_outer=gap_outer,
       z0=geo.z_magnetic_axis(),
@@ -486,8 +491,8 @@ class IonCyclotronSourceConfig(base.SourceModelBase):
     wall_outer: Outer radial location of first wall at plasma midplane level
       [m].
     frequency: ICRF wave frequency [Hz].
-    minority_concentration: He3 minority concentration relative to the electron
-      density in %.
+    minority_concentration: He3 minority fractional concentration relative to
+      the electron density.
     P_total: Total heating power [W].
     absorption_fraction: Fraction of absorbed power.
   """
@@ -500,7 +505,7 @@ class IonCyclotronSourceConfig(base.SourceModelBase):
       120e6
   )
   minority_concentration: torax_pydantic.TimeVaryingScalar = (
-      torax_pydantic.ValidatedDefault(3.0)
+      torax_pydantic.ValidatedDefault(0.03)
   )
   P_total: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(
       10e6
