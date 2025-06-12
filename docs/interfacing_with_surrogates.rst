@@ -12,7 +12,6 @@ boilerplate described in the previous sections has been taken care of, as well
 as the definition of some functions to convert between TORAX structures and
 tensors for the neural network.
 
-
 .. code-block:: python
 
     class MyCustomSurrogateTransportModel(TransportModel):
