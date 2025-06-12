@@ -44,66 +44,66 @@ def prepare_simulation(
     transport_model = torax_config.transport.build_transport_model()
     pedestal_model = torax_config.pedestal.build_pedestal_model()
 
-  geometry_provider = torax_config.geometry.build_provider
-  source_models = source_models_lib.SourceModels(
-      torax_config.sources, neoclassical=torax_config.neoclassical
-  )
+    geometry_provider = torax_config.geometry.build_provider
+    source_models = source_models_lib.SourceModels(
+        torax_config.sources, neoclassical=torax_config.neoclassical
+    )
 
-  static_runtime_params_slice = (
-      build_runtime_params.build_static_params_from_config(torax_config)
-  )
+    static_runtime_params_slice = (
+        build_runtime_params.build_static_params_from_config(torax_config)
+    )
 
-  solver = torax_config.solver.build_solver(
-      static_runtime_params_slice=static_runtime_params_slice,
-      transport_model=transport_model,
-      source_models=source_models,
-      pedestal_model=pedestal_model,
-  )
+    solver = torax_config.solver.build_solver(
+        static_runtime_params_slice=static_runtime_params_slice,
+        transport_model=transport_model,
+        source_models=source_models,
+        pedestal_model=pedestal_model,
+    )
 
-  mhd_models = torax_config.mhd.build_mhd_models(
-      static_runtime_params_slice=static_runtime_params_slice,
-      transport_model=transport_model,
-      source_models=source_models,
-      pedestal_model=pedestal_model,
-  )
+    mhd_models = torax_config.mhd.build_mhd_models(
+        static_runtime_params_slice=static_runtime_params_slice,
+        transport_model=transport_model,
+        source_models=source_models,
+        pedestal_model=pedestal_model,
+    )
 
-  step_fn = step_function.SimulationStepFn(
-      solver=solver,
-      time_step_calculator=torax_config.time_step_calculator.time_step_calculator,
-      transport_model=transport_model,
-      pedestal_model=pedestal_model,
-      mhd_models=mhd_models,
-  )
+    step_fn = step_function.SimulationStepFn(
+        solver=solver,
+        time_step_calculator=torax_config.time_step_calculator.time_step_calculator,
+        transport_model=transport_model,
+        pedestal_model=pedestal_model,
+        mhd_models=mhd_models,
+    )
 
-  dynamic_runtime_params_slice_provider = (
-      build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
-          torax_config
-      )
-  )
-
-  if torax_config.restart and torax_config.restart.do_restart:
-    initial_state, post_processed_outputs = (
-        initial_state_lib.get_initial_state_and_post_processed_outputs_from_file(
-            t_initial=torax_config.numerics.t_initial,
-            file_restart=torax_config.restart,
-            static_runtime_params_slice=static_runtime_params_slice,
-            dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
-            geometry_provider=geometry_provider,
-            step_fn=step_fn,
+    dynamic_runtime_params_slice_provider = (
+        build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
+            torax_config
         )
     )
-    restart_case = True
-  else:
-    initial_state, post_processed_outputs = (
-        initial_state_lib.get_initial_state_and_post_processed_outputs(
-            t=torax_config.numerics.t_initial,
-            static_runtime_params_slice=static_runtime_params_slice,
-            dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
-            geometry_provider=geometry_provider,
-            step_fn=step_fn,
+
+    if torax_config.restart and torax_config.restart.do_restart:
+        initial_state, post_processed_outputs = (
+            initial_state_lib.get_initial_state_and_post_processed_outputs_from_file(
+                t_initial=torax_config.numerics.t_initial,
+                file_restart=torax_config.restart,
+                static_runtime_params_slice=static_runtime_params_slice,
+                dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
+                geometry_provider=geometry_provider,
+                step_fn=step_fn,
+            )
         )
-    )
-    restart_case = False
+        restart_case = True
+    else:
+        initial_state, post_processed_outputs = (
+            initial_state_lib.get_initial_state_and_post_processed_outputs(
+                t=torax_config.numerics.t_initial,
+                static_runtime_params_slice=static_runtime_params_slice,
+                dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
+                geometry_provider=geometry_provider,
+                step_fn=step_fn,
+            )
+        )
+        restart_case = False
 
     return (
         static_runtime_params_slice,
@@ -162,7 +162,7 @@ def run_simulation(
         torax_config=torax_config,
     )
 
-  return (
-      state_history.simulation_output_to_xr(torax_config.restart),
-      state_history,
-  )
+    return (
+        state_history.simulation_output_to_xr(torax_config.restart),
+        state_history,
+    )

@@ -20,19 +20,18 @@ previously executed TORAX reference:
 
 import copy
 import dataclasses
+import importlib
 from typing import Final, Sequence
 from unittest import mock
 
 import numpy as np
 from absl.testing import absltest, parameterized
 from jax import tree
-import numpy as np
+
 from torax._src import state
-from torax._src.orchestration import initial_state
-from torax._src.orchestration import run_simulation
+from torax._src.orchestration import initial_state, run_simulation
 from torax._src.output_tools import output
-from torax._src.test_utils import core_profile_helpers
-from torax._src.test_utils import sim_test_case
+from torax._src.test_utils import core_profile_helpers, sim_test_case
 from torax._src.torax_pydantic import model_config
 
 _ALL_PROFILES: Final[Sequence[str]] = (

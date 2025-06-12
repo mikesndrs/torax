@@ -126,7 +126,9 @@ The following command will run TORAX using the default configuration file
 run_torax --config='examples/basic_config.py'
 ```
 
-Simulation progress is shown by a terminal progress bar indicating the current time and percentage completed.
+
+Simulation progress is shown by a terminal progress bar indicating the current
+time and percentage completed.
 
 To run more involved, ITER-inspired simulations, run:
 
