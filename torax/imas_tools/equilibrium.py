@@ -149,7 +149,7 @@ def geometry_from_IMAS(
     # Because of the discrepancy between Ip_profile[-1] (computed by integration) and global_quantities.ip, here we will scale Ip_profile such that the total plasma current is equal
     Ip_total = -1 * IMAS_data.global_quantities.ip
     Ip_profile = Ip_profile_unscaled * (Ip_total / Ip_profile_unscaled[-1])       # scaled Ip profile such that the total plasma current is consistent
-    
+
     # To check
     z_magnetic_axis = np.asarray(IMAS_data.global_quantities.magnetic_axis.z)
 
