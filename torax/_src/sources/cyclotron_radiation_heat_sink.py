@@ -35,21 +35,22 @@ from torax._src.sources import source
 from torax._src.sources import source_profiles
 import typing_extensions
 
-
 # Default value for the model function to be used for the Cyclotron radiation
 # heat sink source. This is also used as an identifier for the model function in
 # the default source config for Pydantic to "discriminate" against.
 DEFAULT_MODEL_FUNCTION_NAME: str = 'albajar_artaud'
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class StaticRuntimeParams(runtime_params_lib.StaticRuntimeParams):
   beta_min: float
   beta_max: float
   beta_grid_size: int
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   wall_reflection_coeff: array_typing.ScalarFloat
 
@@ -290,10 +291,8 @@ def cyclotron_radiation_albajar(
   # Notation conventions based on the Albajar and Artaud papers
   # pylint: disable=invalid-name
 
-  n_e20_face = (
-      core_profiles.n_e.face_value() * core_profiles.density_reference / 1e20
-  )
-  n_e20_cell = core_profiles.n_e.value * core_profiles.density_reference / 1e20
+  n_e20_face = core_profiles.n_e.face_value() / 1e20
+  n_e20_cell = core_profiles.n_e.value / 1e20
 
   # Dimensionless optical thickness parameter, on-axis:
   # Simplified form of omega_pe**2 / (c * omega_ce) where omega_pe is the
@@ -340,8 +339,7 @@ def cyclotron_radiation_albajar(
       * n_e20_face[0] ** 0.38
       * core_profiles.T_e.face_value()[0]
       * (16 + core_profiles.T_e.face_value()[0]) ** 2.61
-      * (1 + 0.12 * core_profiles.T_e.face_value()[0] / p_a_0**0.41)
-      ** -1.51
+      * (1 + 0.12 * core_profiles.T_e.face_value()[0] / p_a_0**0.41) ** -1.51
       * K
       * G
   )

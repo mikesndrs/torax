@@ -13,7 +13,9 @@
 # limitations under the License.
 
 """The CriticalGradientModel class."""
-import chex
+import dataclasses
+
+import jax
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants as constants_module
@@ -26,7 +28,8 @@ from torax._src.transport_model import transport_model
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   """Dynamic runtime params for the CGM transport model."""
 
@@ -48,11 +51,12 @@ class CriticalGradientTransportModel(transport_model.TransportModel):
 
   def _call_implementation(
       self,
+      transport_dynamic_runtime_params: runtime_params_lib.DynamicRuntimeParams,
       dynamic_runtime_params_slice: runtime_params_slice.DynamicRuntimeParamsSlice,
       geo: geometry.Geometry,
       core_profiles: state.CoreProfiles,
-      pedestal_model_outputs: pedestal_model_lib.PedestalModelOutput,
-  ) -> state.CoreTransport:
+      pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
+  ) -> transport_model.TurbulentTransport:
     r"""Calculates transport coefficients using the Critical Gradient Model.
 
     Uses critical normalized logarithmic ion temperature gradient
@@ -63,11 +67,14 @@ class CriticalGradientTransportModel(transport_model.TransportModel):
     :math:`H` is the Heaviside function.
 
     Args:
-      dynamic_runtime_params_slice: Input runtime parameters that can change
-        without triggering a JAX recompilation.
+      transport_dynamic_runtime_params: Input runtime parameters for this
+        transport model. Can change without triggering a JAX recompilation.
+      dynamic_runtime_params_slice: Input runtime parameters for all components
+        of the simulation that can change without triggering a JAX
+        recompilation.
       geo: Geometry of the torus.
       core_profiles: Core plasma profiles.
-      pedestal_model_outputs: Output of the pedestal model.
+      pedestal_model_output: Output of the pedestal model.
 
     Returns:
       coeffs: The transport coefficients
@@ -76,9 +83,9 @@ class CriticalGradientTransportModel(transport_model.TransportModel):
     # pylint: disable=invalid-name
 
     constants = constants_module.CONSTANTS
-    assert isinstance(
-        dynamic_runtime_params_slice.transport, DynamicRuntimeParams
-    )
+
+    # Required for pytype
+    assert isinstance(transport_dynamic_runtime_params, DynamicRuntimeParams)
 
     s = core_profiles.s_face
     q = core_profiles.q_face
@@ -97,10 +104,7 @@ class CriticalGradientTransportModel(transport_model.TransportModel):
 
     # set critical gradient
     rlti_crit = (
-        4.0
-        / 3.0
-        * (1.0 + T_i_face / T_e_face)
-        * (1.0 + 2.0 * jnp.abs(s) / q)
+        4.0 / 3.0 * (1.0 + T_i_face / T_e_face) * (1.0 + 2.0 * jnp.abs(s) / q)
     )
 
     # gyrobohm diffusivity
@@ -122,31 +126,25 @@ class CriticalGradientTransportModel(transport_model.TransportModel):
     chi_face_ion = jnp.where(
         rlti >= rlti_crit,
         chiGB
-        * dynamic_runtime_params_slice.transport.chi_stiff
-        * (rlti - rlti_crit) ** dynamic_runtime_params_slice.transport.alpha,
+        * transport_dynamic_runtime_params.chi_stiff
+        * (rlti - rlti_crit) ** transport_dynamic_runtime_params.alpha,
         0.0,
     )
 
     # set electron heat transport coefficient to user-defined ratio of ion heat
     # transport coefficient
-    chi_face_el = (
-        chi_face_ion / dynamic_runtime_params_slice.transport.chi_e_i_ratio
-    )
+    chi_face_el = chi_face_ion / transport_dynamic_runtime_params.chi_e_i_ratio
 
     # set electron particle transport coefficient to user-defined ratio of ion
     # heat transport coefficient
-    d_face_el = (
-        chi_face_ion / dynamic_runtime_params_slice.transport.chi_D_ratio
-    )
+    d_face_el = chi_face_ion / transport_dynamic_runtime_params.chi_D_ratio
 
     # User-provided convection coefficient
     v_face_el = (
-        d_face_el
-        * dynamic_runtime_params_slice.transport.VR_D_ratio
-        / geo.R_major
+        d_face_el * transport_dynamic_runtime_params.VR_D_ratio / geo.R_major
     )
 
-    return state.CoreTransport(
+    return transport_model.TurbulentTransport(
         chi_face_ion=chi_face_ion,
         chi_face_el=chi_face_el,
         d_face_el=d_face_el,

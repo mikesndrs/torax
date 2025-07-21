@@ -14,9 +14,12 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import chex
+import jax
 import numpy as np
 import pydantic
 from torax._src import interpolated_param
+from torax._src import jax_utils
 from torax._src.torax_pydantic import torax_pydantic
 import xarray as xr
 
@@ -104,6 +107,48 @@ class InterpolatedParam1dTest(parameterized.TestCase):
       a: torax_pydantic.PositiveTimeVaryingScalar
 
     with self.assertRaisesRegex(pydantic.ValidationError, 'be positive.'):
+      TestModel.model_validate({'a': values})
+
+  @parameterized.named_parameters(
+      dict(
+          testcase_name='float_in_range',
+          values=0.5,
+          should_fail=False,
+      ),
+      dict(
+          testcase_name='array_in_range',
+          values={0.0: 0.1, 1.0: 0.9},
+          should_fail=False,
+      ),
+      dict(
+          testcase_name='float_above_range',
+          values=1.1,
+          should_fail=True,
+      ),
+      dict(
+          testcase_name='float_below_range',
+          values=-0.1,
+          should_fail=True,
+      ),
+      dict(
+          testcase_name='array_with_value_above_range',
+          values={0.0: 0.1, 1.0: 1.1},
+          should_fail=True,
+      ),
+      dict(
+          testcase_name='array_with_value_below_range',
+          values={0.0: -0.1, 1.0: 0.9},
+          should_fail=True,
+      ),
+  )
+  def test_unit_interval_validation(self, values, should_fail):
+    class TestModel(torax_pydantic.BaseModelFrozen):
+      a: torax_pydantic.UnitIntervalTimeVaryingScalar
+
+    if should_fail:
+      with self.assertRaisesRegex(pydantic.ValidationError, 'All values must'):
+        TestModel.model_validate({'a': values})
+    else:
       TestModel.model_validate({'a': values})
 
   @parameterized.parameters(
@@ -209,6 +254,30 @@ class InterpolatedParam1dTest(parameterized.TestCase):
         'The coords in the xr.DataArray must include a "time" coordinate',
     ):
       torax_pydantic.TimeVaryingScalar.model_validate(cfg)
+
+  def test_time_varying_scalar_works_under_jit(self):
+    scalar = torax_pydantic.TimeVaryingScalar.model_validate(
+        (np.array([0.0, 1.0, 2.0]), np.array([1.0, 2.0, 4.0])),
+    )
+    scalar2 = torax_pydantic.TimeVaryingScalar.model_validate(
+        (np.array([0.0, 1.0, 2.0]), np.array([1.0, 4.0, 6.0])),
+    )
+    scalar3 = torax_pydantic.TimeVaryingScalar.model_validate(
+        (np.array([0.0, 1.0]), np.array([1.0, 4.0])),
+    )
+
+    @jax.jit
+    def f(x: torax_pydantic.TimeVaryingScalar, t: chex.Numeric):
+      return x.get_value(t=t)
+
+    self.assertEqual(f(scalar, 1.0), scalar.get_value(t=1.0))
+    self.assertEqual(jax_utils.get_number_of_compiles(f), 1)
+    # Check that the cache can be reused with different values.
+    self.assertEqual(f(scalar2, 1.0), scalar2.get_value(t=1.0))
+    self.assertEqual(jax_utils.get_number_of_compiles(f), 1)
+    # Check that the cache is not reused with different shapes.
+    self.assertEqual(f(scalar3, 1.0), scalar3.get_value(t=1.0))
+    self.assertEqual(jax_utils.get_number_of_compiles(f), 2)
 
 
 if __name__ == '__main__':

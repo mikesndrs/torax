@@ -17,7 +17,9 @@
 import copy
 import logging
 from typing import Any, Mapping
+
 import pydantic
+from torax._src import physics_models
 from torax._src import version
 from torax._src.config import numerics as numerics_lib
 from torax._src.config import plasma_composition as plasma_composition_lib
@@ -48,6 +50,7 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
     pedestal: Config for the pedestal model. If an empty dictionary is passed
       in, the pedestal model will be set to `no_pedestal`.
     sources: Config for the sources.
+    neoclassical: Config for the neoclassical models.
     solver: Config for the solver. If an empty dictionary is passed in, the
       solver model will be set to `linear`.
     transport: Config for the transport model. If an empty dictionary is passed
@@ -64,6 +67,9 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
   plasma_composition: plasma_composition_lib.PlasmaComposition
   geometry: geometry_pydantic_model.Geometry
   sources: sources_pydantic_model.Sources
+  neoclassical: neoclassical_pydantic_model.Neoclassical = (
+      neoclassical_pydantic_model.Neoclassical()  # pylint: disable=missing-kwoa
+  )
   solver: solver_pydantic_model.SolverConfig = pydantic.Field(
       discriminator='solver_type'
   )
@@ -80,33 +86,52 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
   restart: file_restart_pydantic_model.FileRestart | None = pydantic.Field(
       default=None
   )
-  neoclassical: neoclassical_pydantic_model.Neoclassical = (
-      neoclassical_pydantic_model.Neoclassical()
-  )
+
+  def build_physics_models(self):
+    return physics_models.PhysicsModels(
+        pedestal_model=self.pedestal.build_pedestal_model(),
+        source_models=self.sources.build_models(),
+        transport_model=self.transport.build_transport_model(),
+        neoclassical_models=self.neoclassical.build_models(),
+        mhd_models=self.mhd.build_mhd_models(),
+    )
 
   @pydantic.model_validator(mode='before')
   @classmethod
   def _defaults(cls, data: dict[str, Any]) -> dict[str, Any]:
     configurable_data = copy.deepcopy(data)
-    if 'model_name' not in configurable_data['pedestal']:
+    if (
+        isinstance(configurable_data['pedestal'], dict)
+        and 'model_name' not in configurable_data['pedestal']
+    ):
       configurable_data['pedestal']['model_name'] = 'no_pedestal'
-    if 'model_name' not in configurable_data['transport']:
+    if (
+        isinstance(configurable_data['transport'], dict)
+        and 'model_name' not in configurable_data['transport']
+    ):
       configurable_data['transport']['model_name'] = 'constant'
-    if 'solver_type' not in configurable_data['solver']:
+    if (
+        isinstance(configurable_data['solver'], dict)
+        and 'solver_type' not in configurable_data['solver']
+    ):
       configurable_data['solver']['solver_type'] = 'linear'
     return configurable_data
 
   @pydantic.model_validator(mode='after')
   def _check_fields(self) -> typing_extensions.Self:
     using_nonlinear_transport_model = self.transport.model_name in [
+        'qualikiz',
         'qlknn',
         'CGM',
     ]
     using_linear_solver = isinstance(
         self.solver, solver_pydantic_model.LinearThetaMethod
     )
+
+    # pylint: disable=g-long-ternary
+    # pylint: disable=attribute-error
     initial_guess_mode_is_linear = (
-        False  # pylint: disable=g-long-ternary
+        False
         if using_linear_solver
         else self.solver.initial_guess_mode == enums.InitialGuessMode.LINEAR
     )
@@ -136,7 +161,8 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
 
     This method will invalidate all `functools.cached_property` caches of
     all ancestral models in the nested tree, as these could have a dependency
-    on the updated model. In addition, these nodes will be re-validated.
+    on the updated model. In addition, these ancestral models will be
+    re-validated.
 
     Args:
       x: A dictionary whose key is a path `'some.path.to.field_name'` and the
@@ -149,20 +175,20 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
         will be raised if this is not the case.
     """
 
+    old_mesh = self.geometry.build_provider.torax_mesh
     self._update_fields(x)
+    new_mesh = self.geometry.build_provider.torax_mesh
 
-    mesh = self.geometry.build_provider.torax_mesh
-    if _is_nrho_updated(x):
-      # Clear the cached properties of all submodels, as the n_rho may have
-      # changed. Also force the grid to be set, as the grid is dependent on the
-      # n_rho.
+    if old_mesh != new_mesh:
+      # The grid has changed, e.g. due to a new n_rho.
+      # Clear the cached properties of all submodels and update the grid.
       for model in self.submodels:
         model.clear_cached_properties()
-      torax_pydantic.set_grid(self, mesh, mode='force')
+      torax_pydantic.set_grid(self, new_mesh, mode='force')
     else:
       # Update the grid on any new models which are added and have not had their
       # grid set yet.
-      torax_pydantic.set_grid(self, mesh, mode='relaxed')
+      torax_pydantic.set_grid(self, new_mesh, mode='relaxed')
 
   @pydantic.model_validator(mode='after')
   def _set_grid(self) -> Self:
@@ -190,11 +216,3 @@ class ToraxConfig(torax_pydantic.BaseModelFrozen):
       if 'torax_version' in data:
         data = {k: v for k, v in data.items() if k != 'torax_version'}
     return data
-
-
-def _is_nrho_updated(x: Mapping[str, Any]) -> bool:
-  for path in x.keys():
-    chunks = path.split('.')
-    if chunks[-1] == 'n_rho' and chunks[0] == 'geometry':
-      return True
-  return False

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import dataclasses
+
 from absl.testing import absltest
 from absl.testing import parameterized
 import numpy as np
@@ -19,7 +20,6 @@ from torax._src import constants
 from torax._src.config import build_runtime_params
 from torax._src.core_profiles import initialization
 from torax._src.core_profiles import updaters
-from torax._src.sources import source_models as source_models_lib
 from torax._src.test_utils import default_configs
 from torax._src.torax_pydantic import model_config
 
@@ -30,7 +30,7 @@ class BoundaryConditionsTest(parameterized.TestCase):
       dict(
           n_e={0.0: {0.0: 1.5e20, 1.0: 1.0e20}},
           n_e_right_bc=None,
-          expected_n_e_right_bc=1.0,  # Value from profile.
+          expected_n_e_right_bc=1.0e20,  # Value from profile.
       ),
       dict(
           n_e={0.0: {0.0: 1.5e20, 1.0: 1.0e20}},
@@ -38,7 +38,7 @@ class BoundaryConditionsTest(parameterized.TestCase):
               (np.array([0.0, 0.1]), np.array([0.1e20, 2.0e20])),
               'step',
           ),
-          expected_n_e_right_bc=2.0,  # Value from boundary condition.
+          expected_n_e_right_bc=2.0e20,  # Value from boundary condition.
       ),
   )
   def test_setting_boundary_conditions(
@@ -67,10 +67,8 @@ class BoundaryConditionsTest(parameterized.TestCase):
     geo = torax_config.geometry.build_provider(
         t=torax_config.numerics.t_initial
     )
-    source_models = source_models_lib.SourceModels(
-        sources=torax_config.sources,
-        neoclassical=torax_config.neoclassical,
-    )
+    source_models = torax_config.sources.build_models()
+    neoclassical_models = torax_config.neoclassical.build_models()
     provider = (
         build_runtime_params.DynamicRuntimeParamsSliceProvider.from_config(
             torax_config
@@ -87,6 +85,7 @@ class BoundaryConditionsTest(parameterized.TestCase):
         initial_dynamic_runtime_params_slice,
         geo,
         source_models=source_models,
+        neoclassical_models=neoclassical_models,
     )
     dynamic_runtime_params_slice = provider(t=0.5)
 

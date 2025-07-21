@@ -23,8 +23,7 @@ import pydantic
 from torax._src import interpolated_param
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
-from typing_extensions import Annotated
-from typing_extensions import Self
+import typing_extensions
 
 
 class TimeVaryingScalar(model_base.BaseModelFrozen):
@@ -47,10 +46,12 @@ class TimeVaryingScalar(model_base.BaseModelFrozen):
 
   time: pydantic_types.NumpyArray1DSorted
   value: pydantic_types.NumpyArray
-  is_bool_param: bool = False
-  interpolation_mode: interpolated_param.InterpolationMode = (
-      interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+  is_bool_param: typing_extensions.Annotated[bool, model_base.JAX_STATIC] = (
+      False
   )
+  interpolation_mode: typing_extensions.Annotated[
+      interpolated_param.InterpolationMode, model_base.JAX_STATIC
+  ] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
 
   def get_value(self, t: chex.Numeric) -> chex.Array:
     """Returns the value of this parameter interpolated at x=time.
@@ -72,7 +73,7 @@ class TimeVaryingScalar(model_base.BaseModelFrozen):
     )
 
   @pydantic.model_validator(mode='after')
-  def _ensure_consistent_arrays(self) -> Self:
+  def _ensure_consistent_arrays(self) -> typing_extensions.Self:
 
     if not np.issubdtype(self.time.dtype, np.floating):
       raise ValueError('The time array must be a float array.')
@@ -138,7 +139,11 @@ def _interval(
     lower_bound: float,
     upper_bound: float,
 ) -> TimeVaryingScalar:
-  if not np.all(lower_bound <= time_varying_scalar.value <= upper_bound):
+  """Validates that values are in the interval [lower_bound, upper_bound]."""
+  if not np.all(
+      (time_varying_scalar.value >= lower_bound)
+      & (time_varying_scalar.value <= upper_bound)
+  ):
     raise ValueError(
         'All values must be less than %f and greater than %f.'
         % (upper_bound, lower_bound)
@@ -146,10 +151,10 @@ def _interval(
   return time_varying_scalar
 
 
-PositiveTimeVaryingScalar: TypeAlias = Annotated[
+PositiveTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     TimeVaryingScalar, pydantic.AfterValidator(_is_positive)
 ]
-UnitIntervalTimeVaryingScalar: TypeAlias = Annotated[
+UnitIntervalTimeVaryingScalar: TypeAlias = typing_extensions.Annotated[
     TimeVaryingScalar,
     pydantic.AfterValidator(
         functools.partial(_interval, lower_bound=0.0, upper_bound=1.0)

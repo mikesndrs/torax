@@ -30,13 +30,11 @@ from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_
 from torax._src.orchestration import sim_state
 from torax._src.output_tools import output
 from torax._src.output_tools import post_processing
-from torax._src.sources import source_models as source_models_lib
 from torax._src.sources import source_profiles as source_profiles_lib
 from torax._src.test_utils import core_profile_helpers
 from torax._src.test_utils import default_sources
 from torax._src.torax_pydantic import model_config
 import xarray as xr
-
 
 SequenceKey = tree_util.SequenceKey
 GetAttrKey = tree_util.GetAttrKey
@@ -91,16 +89,14 @@ class StateHistoryTest(parameterized.TestCase):
     static_slice = build_runtime_params.build_static_params_from_config(
         self.torax_config
     )
-    source_models = source_models_lib.SourceModels(
-        sources=self.torax_config.sources,
-        neoclassical=self.torax_config.neoclassical,
-    )
-
+    source_models = self.torax_config.sources.build_models()
+    neoclassical_models = self.torax_config.neoclassical.build_models()
     self.core_profiles = initialization.initial_core_profiles(
         dynamic_runtime_params_slice=dynamic_runtime_params_slice,
         static_runtime_params_slice=static_slice,
         geo=self.geo,
         source_models=source_models,
+        neoclassical_models=neoclassical_models,
     )
     self.core_transport = state.CoreTransport.zeros(self.geo)
     self.source_models = source_models
@@ -292,9 +288,15 @@ class StateHistoryTest(parameterized.TestCase):
     output_xr = self.history.simulation_output_to_xr()
     config_dict = json.loads(output_xr.attrs[output.CONFIG])
     self.assertEqual(config_dict['transport']['model_name'], 'constant')
-    self.assertEqual(config_dict['transport']['chi_i']['value'][1][0], 2.0)
+    # Indexing: ['0.0'][1][1][0] = at time 0, at second rho coordinate,
+    # get the value list, and the first value
+    self.assertEqual(
+        config_dict['transport']['chi_i']['value']['0.0'][1][1][0], 2.0
+    )
     # Default values are expected to be set in the saved config
-    self.assertEqual(config_dict['transport']['chi_e']['value'][1][0], 1.0)
+    self.assertEqual(
+        config_dict['transport']['chi_e']['value']['0.0'][1][1][0], 1.0
+    )
 
   def test_config_round_trip(self):
     """Tests that the serialization/deserialization of the config is correct."""

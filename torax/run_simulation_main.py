@@ -25,6 +25,7 @@ import enum
 import functools
 import pathlib
 import time
+
 from absl import app
 from absl import flags
 from absl import logging
@@ -342,6 +343,7 @@ def _post_run_plotting(
 
 def main(_):
   torax.set_jax_precision()
+  torax.log_jax_backend()
 
   if _CONFIG_PATH.value is None:
     raise ValueError(f'--{_CONFIG_PATH.name} must be specified.')

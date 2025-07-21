@@ -57,7 +57,8 @@ class GeometryType(enum.IntEnum):
 # pylint: disable=invalid-name
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class Geometry:
   r"""Describes the magnetic geometry.
 
@@ -205,6 +206,13 @@ class Geometry:
   Phi_b_dot: chex.Array
   _z_magnetic_axis: chex.Array | None
 
+  def __eq__(self, other: 'Geometry') -> bool:
+    try:
+      chex.assert_trees_all_equal(self, other)
+    except AssertionError:
+      return False
+    return True
+
   @property
   def q_correction_factor(self) -> chex.Numeric:
     """Ad-hoc fix for non-physical circular geometry model.
@@ -257,6 +265,18 @@ class Geometry:
   def r_mid_face(self) -> chex.Array:
     """Midplane radius of the plasma on the face grid [m]."""
     return (self.R_out_face - self.R_in_face) / 2
+
+  @property
+  def epsilon(self) -> chex.Array:
+    """Local midplane inverse aspect ratio [dimensionless]."""
+    return (self.R_out - self.R_in) / (self.R_out + self.R_in)
+
+  @property
+  def epsilon_face(self) -> chex.Array:
+    """Local midplane inverse aspect ratio on the face grid [dimensionless]."""
+    return (self.R_out_face - self.R_in_face) / (
+        self.R_out_face + self.R_in_face
+    )
 
   @property
   def drho(self) -> chex.Array:
@@ -351,9 +371,9 @@ def stack_geometries(geometries: Sequence[Geometry]) -> Geometry:
     field_name = field.name
     field_value = getattr(first_geo, field_name)
     # Stack stackable fields. Save first geo's value for non-stackable fields.
-    if isinstance(field_value, chex.Array):
+    if isinstance(field_value, chex.Array) or isinstance(field_value, float):
       field_values = [getattr(geo, field_name) for geo in geometries]
-      stacked_data[field_name] = jnp.stack(field_values)
+      stacked_data[field_name] = np.stack(field_values)
     else:
       stacked_data[field_name] = field_value
   # Create a new object with the stacked data with the same class (i.e.

@@ -38,7 +38,7 @@ copyright = '2024, The TORAX Authors.'
 author = 'The TORAX authors'
 
 # The short X.Y version
-version = 'v1.0.0'
+version = 'v1.0.3'
 # The full version, including alpha/beta/rc tags
 release = ''
 github_base_url = f'https://github.com/google-deepmind/torax/tree/{version}'
@@ -349,4 +349,8 @@ rst_epilog = f"""
 
 .. |neoclassical| replace:: `neoclassical <torax_src_neoclassical_target_>`_
 .. _torax_src_neoclassical_target: {github_base_url}/torax/_src/neoclassical
+
+.. |example_imas_scenario| replace:: `example_imas_scenario.yaml <torax_imas_example_yaml_target_>`_
+.. _torax_imas_example_yaml_target: {github_base_url}/torax/data/third_party/geo/example_imas_scenario.yaml
+
 """

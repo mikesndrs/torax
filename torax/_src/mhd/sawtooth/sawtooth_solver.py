@@ -12,23 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Sawtooth model."""
+"""A solver that implements the sawtooth trigger and redistribution."""
 
 import dataclasses
+
 import jax
+from torax._src import physics_models as physics_models_lib
 from torax._src import state
 from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import convertors
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry
-from torax._src.mhd.sawtooth import redistribution_base
-from torax._src.mhd.sawtooth import trigger_base
-from torax._src.neoclassical.conductivity import base as base_conductivity
-from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.solver import solver
-from torax._src.sources import source_models as source_models_lib
-from torax._src.sources import source_profile_builders
 from torax._src.sources import source_profiles as source_profiles_lib
-from torax._src.transport_model import transport_model as transport_model_lib
 
 
 # TODO(b/414537757). Sawtooth extensions.
@@ -36,26 +32,18 @@ from torax._src.transport_model import transport_model as transport_model_lib
 # b. Porcelli model with free parameters and fast ion sensitivities.
 # c. "Smooth" version that can work with forward-sensitivity-analysis and
 #    stationary-state applications without the need for averaging.
-class SawtoothModel(solver.Solver):
+class SawtoothSolver(solver.Solver):
   """Sawtooth trigger and redistribution, and carries out sawtooth step."""
 
   def __init__(
       self,
       static_runtime_params_slice: runtime_params_slice.StaticRuntimeParamsSlice,
-      trigger_model: trigger_base.TriggerModel,
-      redistribution_model: redistribution_base.RedistributionModel,
-      transport_model: transport_model_lib.TransportModel,
-      pedestal_model: pedestal_model_lib.PedestalModel,
-      source_models: source_models_lib.SourceModels,
+      physics_models: physics_models_lib.PhysicsModels,
   ):
     super().__init__(
         static_runtime_params_slice=static_runtime_params_slice,
-        transport_model=transport_model,
-        source_models=source_models,
-        pedestal_model=pedestal_model,
+        physics_models=physics_models,
     )
-    self._trigger_model = trigger_model
-    self._redistribution_model = redistribution_model
 
   def _x_new(
       self,
@@ -67,15 +55,10 @@ class SawtoothModel(solver.Solver):
       geo_t_plus_dt: geometry.Geometry,
       core_profiles_t: state.CoreProfiles,
       core_profiles_t_plus_dt: state.CoreProfiles,
-      core_sources_t: source_profiles_lib.SourceProfiles,
-      core_transport_t: state.CoreTransport,
       explicit_source_profiles: source_profiles_lib.SourceProfiles,
       evolving_names: tuple[str, ...],
   ) -> tuple[
       tuple[cell_variable.CellVariable, ...],
-      source_profiles_lib.SourceProfiles,
-      base_conductivity.Conductivity,
-      state.CoreTransport,
       state.SolverNumericOutputs,
   ]:
     """Applies the sawtooth model and outputs new state attributes if triggered.
@@ -98,20 +81,18 @@ class SawtoothModel(solver.Solver):
       core_profiles_t: Core profiles at time t.
       core_profiles_t_plus_dt: Core profiles containing boundary conditions and
         prescribed profiles at time t + crash_dt.
-      core_sources_t: Source profiles at time t.
-      core_transport_t: Transport coefficients at time t.
       explicit_source_profiles: Explicit source profiles at time t.
       evolving_names: Names of evolving variables.
 
     Returns:
       Updated tuple of evolving CellVariables from CoreProfiles
-      Source profiles consistent with redistributed state.
-      Conductivity consistent with redistributed state.
-      Transport coefficients consistent with redistributed state.
       SolverNumericOutputs indicating a sawtooth crash.
     """
+    sawtooth_models = self.physics_models.mhd_models.sawtooth_models
+    if sawtooth_models is None:
+      raise ValueError('Sawtooth model is None.')
 
-    trigger_sawtooth, rho_norm_q1 = self._trigger_model(
+    trigger_sawtooth, rho_norm_q1 = sawtooth_models.trigger_model(
         static_runtime_params_slice,
         dynamic_runtime_params_slice_t,
         geo_t,
@@ -120,13 +101,10 @@ class SawtoothModel(solver.Solver):
 
     def _redistribute_state() -> tuple[
         tuple[cell_variable.CellVariable, ...],
-        source_profiles_lib.SourceProfiles,
-        base_conductivity.Conductivity,
-        state.CoreTransport,
         state.SolverNumericOutputs,
     ]:
 
-      redistributed_core_profiles = self._redistribution_model(
+      redistributed_core_profiles = sawtooth_models.redistribution_model(
           rho_norm_q1,
           static_runtime_params_slice,
           dynamic_runtime_params_slice_t,
@@ -154,37 +132,8 @@ class SawtoothModel(solver.Solver):
           ),
       )
 
-      conductivity_post_step = (
-          self.source_models.conductivity.calculate_conductivity(
-              dynamic_runtime_params_slice_t_plus_dt,
-              geo_t_plus_dt,
-              redistributed_core_profiles,
-          )
-      )
-      core_sources_post_step = source_profile_builders.get_all_source_profiles(
-          static_runtime_params_slice,
-          dynamic_runtime_params_slice_t_plus_dt,
-          geo_t_plus_dt,
-          core_profiles=evolved_core_profiles,
-          source_models=self.source_models,
-          conductivity=conductivity_post_step,
-      )
-
-      x_post_step = tuple(
-          [getattr(evolved_core_profiles, name) for name in evolving_names]
-      )
-
-      pedestal_model_output = self.pedestal_model(
-          dynamic_runtime_params_slice_t_plus_dt,
-          geo_t_plus_dt,
-          redistributed_core_profiles,
-      )
-
-      core_transport_post_step = self.transport_model(
-          dynamic_runtime_params_slice_t_plus_dt,
-          geo_t_plus_dt,
-          redistributed_core_profiles,
-          pedestal_model_output,
+      x_post_step = convertors.core_profiles_to_solver_x_tuple(
+          evolved_core_profiles, evolving_names
       )
 
       solver_numeric_outputs_post_step = state.SolverNumericOutputs(
@@ -193,9 +142,6 @@ class SawtoothModel(solver.Solver):
 
       return (
           x_post_step,
-          core_sources_post_step,
-          conductivity_post_step,
-          core_transport_post_step,
           solver_numeric_outputs_post_step,
       )
 
@@ -206,33 +152,6 @@ class SawtoothModel(solver.Solver):
         _redistribute_state,
         lambda: (
             tuple([getattr(core_profiles_t, name) for name in evolving_names]),
-            core_sources_t,
-            base_conductivity.Conductivity(
-                sigma=core_profiles_t.sigma,
-                sigma_face=core_profiles_t.sigma_face),
-            core_transport_t,
             state.SolverNumericOutputs(),
         ),
-    )
-
-  def __hash__(self) -> int:
-    return hash((
-        self._trigger_model,
-        self._redistribution_model,
-        self.static_runtime_params_slice,
-        self.transport_model,
-        self.pedestal_model,
-        self.source_models,
-    ))
-
-  def __eq__(self, other: object) -> bool:
-    return (
-        isinstance(other, SawtoothModel)
-        and self._trigger_model == other._trigger_model
-        and self._redistribution_model == other._redistribution_model
-        and self.static_runtime_params_slice
-        == other.static_runtime_params_slice
-        and self.transport_model == other.transport_model
-        and self.pedestal_model == other.pedestal_model
-        and self.source_models == other.source_models
     )

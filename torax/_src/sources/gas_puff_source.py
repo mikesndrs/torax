@@ -17,6 +17,7 @@ import dataclasses
 from typing import ClassVar, Literal
 
 import chex
+import jax
 from torax._src import array_typing
 from torax._src import state
 from torax._src.config import runtime_params_slice
@@ -29,7 +30,6 @@ from torax._src.sources import source
 from torax._src.sources import source_profiles
 from torax._src.torax_pydantic import torax_pydantic
 
-
 # Default value for the model function to be used for the gas puff
 # source. This is also used as an identifier for the model function in
 # the default source config for Pydantic to "discriminate" against.
@@ -37,13 +37,14 @@ DEFAULT_MODEL_FUNCTION_NAME: str = 'exponential'
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicGasPuffRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   puff_decay_length: array_typing.ScalarFloat
   S_total: array_typing.ScalarFloat
 
 
-# Default formula: exponential with density_reference normalization.
+# Default formula: exponential
 def calc_puff_source(
     unused_static_runtime_params_slice: runtime_params_slice.StaticRuntimeParamsSlice,
     dynamic_runtime_params_slice: runtime_params_slice.DynamicRuntimeParamsSlice,
@@ -62,10 +63,7 @@ def calc_puff_source(
       formulas.exponential_profile(
           decay_start=1.0,
           width=dynamic_source_runtime_params.puff_decay_length,
-          total=(
-              dynamic_source_runtime_params.S_total
-              / dynamic_runtime_params_slice.numerics.density_reference
-          ),
+          total=dynamic_source_runtime_params.S_total,
           geo=geo,
       ),
   )

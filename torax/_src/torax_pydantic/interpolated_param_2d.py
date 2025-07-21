@@ -17,6 +17,7 @@
 from collections.abc import Mapping
 import functools
 from typing import Any, Literal, TypeAlias
+
 import chex
 import numpy as np
 import pydantic
@@ -24,8 +25,7 @@ from torax._src import interpolated_param
 from torax._src import jax_utils
 from torax._src.torax_pydantic import model_base
 from torax._src.torax_pydantic import pydantic_types
-from typing_extensions import Annotated
-from typing_extensions import Self
+import typing_extensions
 import xarray as xr
 
 ValueType: TypeAlias = dict[
@@ -42,8 +42,8 @@ class Grid1D(model_base.BaseModelFrozen):
     dx: Distance between cell centers.
   """
 
-  nx: Annotated[pydantic.conint(ge=4), model_base.JAX_STATIC]
-  dx: Annotated[pydantic.PositiveFloat, model_base.JAX_STATIC]
+  nx: typing_extensions.Annotated[pydantic.conint(ge=4), model_base.JAX_STATIC]
+  dx: typing_extensions.Annotated[pydantic.PositiveFloat, model_base.JAX_STATIC]
 
   @property
   def face_centers(self) -> np.ndarray:
@@ -55,7 +55,7 @@ class Grid1D(model_base.BaseModelFrozen):
     """Coordinates of cell centers."""
     return _get_cell_centers(nx=self.nx, dx=self.dx)
 
-  def __eq__(self, other: Self) -> bool:
+  def __eq__(self, other: typing_extensions.Self) -> bool:
     return self.nx == other.nx and self.dx == other.dx
 
   def __hash__(self) -> int:
@@ -86,13 +86,45 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
   """
 
   value: ValueType
-  rho_interpolation_mode: interpolated_param.InterpolationMode = (
-      interpolated_param.InterpolationMode.PIECEWISE_LINEAR
-  )
-  time_interpolation_mode: interpolated_param.InterpolationMode = (
-      interpolated_param.InterpolationMode.PIECEWISE_LINEAR
-  )
+  rho_interpolation_mode: typing_extensions.Annotated[
+      interpolated_param.InterpolationMode, model_base.JAX_STATIC
+  ] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
+  time_interpolation_mode: typing_extensions.Annotated[
+      interpolated_param.InterpolationMode, model_base.JAX_STATIC
+  ] = interpolated_param.InterpolationMode.PIECEWISE_LINEAR
   grid: Grid1D | None = None
+
+  def tree_flatten(self):
+    children = (
+        self.value,
+        # Save out the cached interpolated params.
+        self._get_cached_interpolated_param_cell,
+        self._get_cached_interpolated_param_face,
+        self._get_cached_interpolated_param_face_right,
+    )
+    aux_data = (
+        self.rho_interpolation_mode,
+        self.time_interpolation_mode,
+        self.grid,
+    )
+    return children, aux_data
+
+  @classmethod
+  def tree_unflatten(cls, aux_data, children):
+    # Avoid calling model_validate as validation should be done already.
+    obj = cls.model_construct(
+        value=children[0],
+        rho_interpolation_mode=aux_data[0],
+        time_interpolation_mode=aux_data[1],
+        grid=aux_data[2],
+    )
+    # Plug back in the cached interpolated params to avoid losing the cache.
+    # pylint: disable=protected-access
+    obj._get_cached_interpolated_param_cell = children[1]
+    obj._get_cached_interpolated_param_face = children[2]
+    obj._get_cached_interpolated_param_face_right = children[3]
+    # pylint: enable=protected-access
+    return obj
 
   @functools.cached_property
   def right_boundary_conditions_defined(self) -> bool:
@@ -131,7 +163,7 @@ class TimeVaryingArray(model_base.BaseModelFrozen):
       case _:
         raise ValueError(f'Unknown grid type: {grid_type}')
 
-  def __eq__(self, other: Self):
+  def __eq__(self, other: typing_extensions.Self):
     try:
       chex.assert_trees_all_equal(self.value, other.value)
       return (
@@ -283,7 +315,7 @@ def _is_positive(array: TimeVaryingArray) -> TimeVaryingArray:
   return array
 
 
-PositiveTimeVaryingArray = Annotated[
+PositiveTimeVaryingArray = typing_extensions.Annotated[
     TimeVaryingArray, pydantic.AfterValidator(_is_positive)
 ]
 

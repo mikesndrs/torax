@@ -20,18 +20,19 @@ previously executed TORAX reference:
 
 import copy
 import dataclasses
-import importlib
 from typing import Final, Sequence
 from unittest import mock
 
-import numpy as np
-from absl.testing import absltest, parameterized
+from absl.testing import absltest
+from absl.testing import parameterized
 from jax import tree
-
+import numpy as np
 from torax._src import state
-from torax._src.orchestration import initial_state, run_simulation
+from torax._src.orchestration import initial_state
+from torax._src.orchestration import run_simulation
 from torax._src.output_tools import output
-from torax._src.test_utils import core_profile_helpers, sim_test_case
+from torax._src.test_utils import core_profile_helpers
+from torax._src.test_utils import sim_test_case
 from torax._src.torax_pydantic import model_config
 
 _ALL_PROFILES: Final[Sequence[str]] = (
@@ -65,10 +66,20 @@ class SimTest(sim_test_case.SimTestCase):
           'test_implicit',
           'test_implicit.py',
       ),
+      # Tests prescribed transport
+      (
+          'test_prescribed_transport',
+          'test_prescribed_transport.py',
+      ),
       # Tests BgB model heat transport only
       (
           'test_bohmgyrobohm_all',
           'test_bohmgyrobohm_all.py',
+      ),
+      # Tests combined transport model
+      (
+          'test_combined_transport',
+          'test_combined_transport.py',
       ),
       # Test that we are able to reproduce FiPy's behavior in a case where
       # FiPy is unstable
@@ -221,6 +232,11 @@ class SimTest(sim_test_case.SimTestCase):
           'test_iterhybrid_predictor_corrector_cyclotron',
           'test_iterhybrid_predictor_corrector_cyclotron.py',
       ),
+      # Predictor-corrector solver with neoclassical transport
+      (
+          'test_iterhybrid_predictor_corrector_neoclassical',
+          'test_iterhybrid_predictor_corrector_neoclassical.py',
+      ),
       # Tests current and density rampup for ITER-hybrid-like-config
       # using Newton-Raphson. Only case which reverts to coarse_tol for several
       # timesteps (with negligible impact on results compared to full tol).
@@ -265,10 +281,9 @@ class SimTest(sim_test_case.SimTestCase):
           'test_psichease_prescribed_jtot_vloop',
           'test_psichease_prescribed_jtot_vloop.py',
       ),
-      # Tests IMAS geometry.
       (
-          'test_imas',
-          'test_imas.py',
+          'test_implicit_short_optimizer',
+          'test_implicit_short_optimizer.py',
       ),
       # Tests full integration for ITER-hybrid-like config with IMAS geometry.
       (
@@ -312,18 +327,25 @@ class SimTest(sim_test_case.SimTestCase):
     """Tests that running the solver with all equations off is a no-op."""
     torax_config = self._get_torax_config('test_iterhybrid_rampup.py')
     torax_config.update_fields({
-        'numerics.t_final': 0.1,  # Modify final step.
-        'numerics.evolve_ion_heat': False,
-        'numerics.evolve_electron_heat': False,
-        'numerics.evolve_current': False,
-        'numerics.evolve_density': False,
-        # Keep profiles fixed.
-        'profile_conditions.Ip': 3.0e6,  # MA.
-        'profile_conditions.n_e': 1.0,
-        'profile_conditions.n_e_right_bc': 1.0,
-        'profile_conditions.n_e_nbar_is_fGW': False,
-        'profile_conditions.T_i': 6.0,
-        'profile_conditions.T_e': 6.0,
+        'numerics': {
+            't_final': 0.1,  # Modify final step.
+            'fixed_dt': 0.06,
+            'exact_t_final': False,
+            'evolve_ion_heat': False,
+            'evolve_electron_heat': False,
+            'evolve_current': False,
+            'evolve_density': False,
+        },
+        'profile_conditions': {
+            'Ip': 3.0e6,
+            'n_e': 1.0e20,
+            'n_e_right_bc': 1.0e20,
+            'n_e_nbar_is_fGW': False,
+            'T_i': 6.0,
+            'T_e': 6.0,
+            'T_i_right_bc': 0.1,
+            'T_e_right_bc': 0.1,
+        },
     })
 
     _, history = run_simulation.run_simulation(torax_config, progress_bar=False)
@@ -484,13 +506,13 @@ class SimTest(sim_test_case.SimTestCase):
     )
     # pylint: enable=invalid-name
 
-  def test_ip_bc_vloop_bc_equivalence(self):
+  def test_ip_bc_v_loop_bc_equivalence(self):
     """Tests the equivalence of the Ip BC and the VLoop BC.
 
     In this test we:
     - Run a sim with the Ip BC.
-    - Get from the output the vloop_lcfs
-    - Run a second sim with the Vloop BC using vloop_lcfs from the first sim
+    - Get from the output the v_loop_lcfs
+    - Run a second sim with the Vloop BC using v_loop_lcfs from the first sim
     - Compare core profiles between the two sims. Exact equivalence is not
     expected since the boundary condition numerics are different, but should be
     close. This is a strong test that the VLoop BC is working as expected.
@@ -505,22 +527,22 @@ class SimTest(sim_test_case.SimTestCase):
     times = sim_outputs_ip_bc.times
 
     # Run the second sim
-    config_vloop_bc = copy.deepcopy(config_ip_bc)
-    config_vloop_bc['profile_conditions'][
-        'use_vloop_lcfs_boundary_condition'
+    config_v_loop_bc = copy.deepcopy(config_ip_bc)
+    config_v_loop_bc['profile_conditions'][
+        'use_v_loop_lcfs_boundary_condition'
     ] = True
-    config_vloop_bc['profile_conditions']['vloop_lcfs'] = (
+    config_v_loop_bc['profile_conditions']['v_loop_lcfs'] = (
         times,
-        sim_outputs_ip_bc._stacked_core_profiles.vloop_lcfs,
+        sim_outputs_ip_bc._stacked_core_profiles.v_loop_lcfs,
     )
-    torax_config = model_config.ToraxConfig.from_dict(config_vloop_bc)
-    _, sim_outputs_vloop_bc = run_simulation.run_simulation(torax_config)
+    torax_config = model_config.ToraxConfig.from_dict(config_v_loop_bc)
+    _, sim_outputs_v_loop_bc = run_simulation.run_simulation(torax_config)
 
     profiles_to_check = (
-        sim_outputs_vloop_bc._stacked_core_profiles.T_i,
-        sim_outputs_vloop_bc._stacked_core_profiles.T_e,
-        sim_outputs_vloop_bc._stacked_core_profiles.psi,
-        sim_outputs_vloop_bc._stacked_core_profiles.n_e,
+        sim_outputs_v_loop_bc._stacked_core_profiles.T_i,
+        sim_outputs_v_loop_bc._stacked_core_profiles.T_e,
+        sim_outputs_v_loop_bc._stacked_core_profiles.psi,
+        sim_outputs_v_loop_bc._stacked_core_profiles.n_e,
     )
 
     for profile in profiles_to_check:

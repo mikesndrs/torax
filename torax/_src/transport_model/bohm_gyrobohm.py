@@ -13,7 +13,9 @@
 # limitations under the License.
 
 """The BohmGyroBohmModel class."""
-import chex
+import dataclasses
+
+import jax
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import constants as constants_module
@@ -22,11 +24,12 @@ from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.transport_model import runtime_params as runtime_params_lib
-from torax._src.transport_model import transport_model
+from torax._src.transport_model import transport_model as transport_model_lib
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   """Dynamic runtime params for the BgB transport model."""
 
@@ -43,7 +46,7 @@ class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   chi_i_gyrobohm_multiplier: array_typing.ScalarFloat
 
 
-class BohmGyroBohmTransportModel(transport_model.TransportModel):
+class BohmGyroBohmTransportModel(transport_model_lib.TransportModel):
   """Calculates various coefficients related to particle transport according to the Bohm + gyro-Bohm Model."""
 
   def __init__(
@@ -54,11 +57,12 @@ class BohmGyroBohmTransportModel(transport_model.TransportModel):
 
   def _call_implementation(
       self,
+      transport_dynamic_runtime_params: runtime_params_lib.DynamicRuntimeParams,
       dynamic_runtime_params_slice: runtime_params_slice.DynamicRuntimeParamsSlice,
       geo: geometry.Geometry,
       core_profiles: state.CoreProfiles,
-      pedestal_model_outputs: pedestal_model_lib.PedestalModelOutput,
-  ) -> state.CoreTransport:
+      pedestal_model_output: pedestal_model_lib.PedestalModelOutput,
+  ) -> transport_model_lib.TurbulentTransport:
     r"""Calculates transport coefficients using the BohmGyroBohm model.
 
     We use the implementation from Tholerus et al, Section 3.3.
@@ -68,38 +72,37 @@ class BohmGyroBohmTransportModel(transport_model.TransportModel):
     https://torax.readthedocs.io/en/latest/physics_models.html
 
     Args:
-      dynamic_runtime_params_slice: Input runtime parameters that can change
-        without triggering a JAX recompilation.
+      transport_dynamic_runtime_params: Input runtime parameters for this
+        transport model. Can change without triggering a JAX recompilation.
+      dynamic_runtime_params_slice: Input runtime parameters for all components
+        of the simulation that can change without triggering a JAX
+        recompilation.
       geo: Geometry of the torus.
       core_profiles: Core plasma profiles.
-      pedestal_model_outputs: Output of the pedestal model.
+      pedestal_model_output: Output of the pedestal model.
 
     Returns:
       coeffs: The transport coefficients
     """
-    del pedestal_model_outputs  # Unused.
+    del pedestal_model_output  # Unused.
     # pylint: disable=invalid-name
-    assert isinstance(
-        dynamic_runtime_params_slice.transport, DynamicRuntimeParams
-    )
-
-    true_n_e_face = (
-        core_profiles.n_e.face_value()
-        * dynamic_runtime_params_slice.numerics.density_reference
-    )
-    true_n_e_grad_face = (
-        core_profiles.n_e.face_grad()
-        * dynamic_runtime_params_slice.numerics.density_reference
-    )
+    # Required for pytype
+    assert isinstance(transport_dynamic_runtime_params, DynamicRuntimeParams)
 
     # Bohm term of heat transport
     chi_e_B = (
         geo.r_mid_face
         * core_profiles.q_face**2
-        / (constants_module.CONSTANTS.qe * geo.B_0 * true_n_e_face)
+        / (
+            constants_module.CONSTANTS.qe
+            * geo.B_0
+            * core_profiles.n_e.face_value()
+        )
         * (
-            jnp.abs(true_n_e_grad_face) * core_profiles.T_e.face_value()
-            + jnp.abs(core_profiles.T_e.face_grad()) * true_n_e_face
+            jnp.abs(core_profiles.n_e.face_grad())
+            * core_profiles.T_e.face_value()
+            + jnp.abs(core_profiles.T_e.face_grad())
+            * core_profiles.n_e.face_value()
         )
         * constants_module.CONSTANTS.keV2J
         / geo.rho_b
@@ -126,24 +129,24 @@ class BohmGyroBohmTransportModel(transport_model.TransportModel):
 
     # Calibrated transport coefficients
     chi_e_bohm = (
-        dynamic_runtime_params_slice.transport.chi_e_bohm_coeff
-        * dynamic_runtime_params_slice.transport.chi_e_bohm_multiplier
+        transport_dynamic_runtime_params.chi_e_bohm_coeff
+        * transport_dynamic_runtime_params.chi_e_bohm_multiplier
         * chi_e_B
     )
     chi_e_gyrobohm = (
-        dynamic_runtime_params_slice.transport.chi_e_gyrobohm_coeff
-        * dynamic_runtime_params_slice.transport.chi_e_gyrobohm_multiplier
+        transport_dynamic_runtime_params.chi_e_gyrobohm_coeff
+        * transport_dynamic_runtime_params.chi_e_gyrobohm_multiplier
         * chi_e_gB
     )
 
     chi_i_bohm = (
-        dynamic_runtime_params_slice.transport.chi_i_bohm_coeff
-        * dynamic_runtime_params_slice.transport.chi_i_bohm_multiplier
+        transport_dynamic_runtime_params.chi_i_bohm_coeff
+        * transport_dynamic_runtime_params.chi_i_bohm_multiplier
         * chi_i_B
     )
     chi_i_gyrobohm = (
-        dynamic_runtime_params_slice.transport.chi_i_gyrobohm_coeff
-        * dynamic_runtime_params_slice.transport.chi_i_gyrobohm_multiplier
+        transport_dynamic_runtime_params.chi_i_gyrobohm_coeff
+        * transport_dynamic_runtime_params.chi_i_gyrobohm_multiplier
         * chi_i_gB
     )
 
@@ -153,10 +156,10 @@ class BohmGyroBohmTransportModel(transport_model.TransportModel):
 
     # Electron diffusivity
     weighting = (
-        dynamic_runtime_params_slice.transport.D_face_c1
+        transport_dynamic_runtime_params.D_face_c1
         + (
-            dynamic_runtime_params_slice.transport.D_face_c2
-            - dynamic_runtime_params_slice.transport.D_face_c1
+            transport_dynamic_runtime_params.D_face_c2
+            - transport_dynamic_runtime_params.D_face_c1
         )
         * geo.rho_face_norm
     )
@@ -173,9 +176,9 @@ class BohmGyroBohmTransportModel(transport_model.TransportModel):
     ])
 
     # Electron convectivity set proportional to the electron diffusivity
-    v_face_el = dynamic_runtime_params_slice.transport.V_face_coeff * d_face_el
+    v_face_el = transport_dynamic_runtime_params.V_face_coeff * d_face_el
 
-    return state.CoreTransport(
+    return transport_model_lib.TurbulentTransport(
         chi_face_ion=chi_i,
         chi_face_el=chi_e,
         d_face_el=d_face_el,

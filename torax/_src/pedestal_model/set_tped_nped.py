@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """A basic version of the pedestal model that uses direct specification."""
-import chex
+import dataclasses
+
+import jax
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import state
@@ -24,7 +26,8 @@ from typing_extensions import override
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   """Dynamic runtime params for the BgB transport model."""
 
@@ -65,11 +68,8 @@ class SetTemperatureDensityPedestalModel(pedestal_model.PedestalModel):
         pedestal_params.n_e_ped * nGW,
         pedestal_params.n_e_ped,
     )
-    n_e_ped_ref = (
-        n_e_ped / dynamic_runtime_params_slice.numerics.density_reference
-    )
     return pedestal_model.PedestalModelOutput(
-        n_e_ped=n_e_ped_ref,
+        n_e_ped=n_e_ped,
         T_i_ped=pedestal_params.T_i_ped,
         T_e_ped=pedestal_params.T_e_ped,
         rho_norm_ped_top=pedestal_params.rho_norm_ped_top,

@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Helper for finding safety factor outputs."""
+import dataclasses
 import functools
 
 import chex
 import jax
 from jax import numpy as jnp
 from torax._src import array_typing
+from torax._src import jax_utils
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class SafetyFactorFit:
   """Collection of outputs calculated after each simulation step.
 
@@ -40,6 +43,7 @@ class SafetyFactorFit:
     rho_q_3_1_second: Second outermost rho_norm value that intercepts the q=3/1
       plane.
   """
+
   rho_q_min: array_typing.ScalarFloat
   q_min: array_typing.ScalarFloat
   rho_q_3_2_first: array_typing.ScalarFloat
@@ -161,7 +165,7 @@ def _root_in_interval(
   return jnp.where(in_interval, root_values, -jnp.inf)
 
 
-@jax.jit
+@jax_utils.jit
 def find_min_q_and_q_surface_intercepts(
     rho_norm: jax.Array, q_face: jax.Array
 ) -> SafetyFactorFit:

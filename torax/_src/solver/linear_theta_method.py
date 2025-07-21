@@ -13,13 +13,16 @@
 # limitations under the License.
 
 """The LinearThetaMethod solver class."""
+import functools
+
 import jax
 from torax._src import state
+from torax._src import xnp
 from torax._src.config import runtime_params_slice
+from torax._src.core_profiles import convertors
 from torax._src.fvm import calc_coeffs
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry
-from torax._src.neoclassical.conductivity import base as conductivity_base
 from torax._src.solver import predictor_corrector_method
 from torax._src.solver import solver as solver_lib
 from torax._src.sources import source_profiles
@@ -28,6 +31,14 @@ from torax._src.sources import source_profiles
 class LinearThetaMethod(solver_lib.Solver):
   """Time step update using theta method, linearized on coefficients at t."""
 
+  @functools.partial(
+      xnp.jit,
+      static_argnames=[
+          'self',
+          'static_runtime_params_slice',
+          'evolving_names',
+      ],
+  )
   def _x_new(
       self,
       dt: jax.Array,
@@ -38,33 +49,24 @@ class LinearThetaMethod(solver_lib.Solver):
       geo_t_plus_dt: geometry.Geometry,
       core_profiles_t: state.CoreProfiles,
       core_profiles_t_plus_dt: state.CoreProfiles,
-      core_sources_t: source_profiles.SourceProfiles,
-      core_transport_t: state.CoreTransport,
       explicit_source_profiles: source_profiles.SourceProfiles,
       evolving_names: tuple[str, ...],
   ) -> tuple[
       tuple[cell_variable.CellVariable, ...],
-      source_profiles.SourceProfiles,
-      conductivity_base.Conductivity,
-      state.CoreTransport,
       state.SolverNumericOutputs,
   ]:
     """See Solver._x_new docstring."""
 
-    # Not used in this implementation.
-    del core_sources_t, core_transport_t
-
-    x_old = tuple([core_profiles_t[name] for name in evolving_names])
-    x_new_guess = tuple(
-        [core_profiles_t_plus_dt[name] for name in evolving_names]
+    x_old = convertors.core_profiles_to_solver_x_tuple(
+        core_profiles_t, evolving_names
+    )
+    x_new_guess = convertors.core_profiles_to_solver_x_tuple(
+        core_profiles_t_plus_dt, evolving_names
     )
 
     coeffs_callback = calc_coeffs.CoeffsCallback(
         static_runtime_params_slice=static_runtime_params_slice,
-        transport_model=self.transport_model,
-        explicit_source_profiles=explicit_source_profiles,
-        source_models=self.source_models,
-        pedestal_model=self.pedestal_model,
+        physics_models=self.physics_models,
         evolving_names=evolving_names,
     )
 
@@ -75,6 +77,7 @@ class LinearThetaMethod(solver_lib.Solver):
         geo_t,
         core_profiles_t,
         x_old,
+        explicit_source_profiles=explicit_source_profiles,
         allow_pereverzev=True,
         explicit_call=True,
     )
@@ -95,28 +98,23 @@ class LinearThetaMethod(solver_lib.Solver):
         core_profiles_t_plus_dt=core_profiles_t_plus_dt,
         coeffs_exp=coeffs_exp,
         coeffs_callback=coeffs_callback,
+        explicit_source_profiles=explicit_source_profiles,
     )
 
-    coeffs_final = coeffs_callback(
-        dynamic_runtime_params_slice_t_plus_dt,
-        geo_t_plus_dt,
-        core_profiles_t_plus_dt,
-        x_new,
-        allow_pereverzev=True,
-    )
-    core_sources, core_conductivity, core_transport = (
-        coeffs_final.auxiliary_outputs
-    )
+    if static_runtime_params_slice.solver.use_predictor_corrector:
+      inner_solver_iterations = (
+          1 + dynamic_runtime_params_slice_t_plus_dt.solver.n_corrector_steps
+      )
+    else:
+      inner_solver_iterations = 1
 
     solver_numeric_outputs = state.SolverNumericOutputs(
-        inner_solver_iterations=1,
+        inner_solver_iterations=inner_solver_iterations,
+        outer_solver_iterations=1,
         solver_error_state=0,  # linear method always works
     )
 
     return (
         x_new,
-        core_sources,
-        core_conductivity,
-        core_transport,
         solver_numeric_outputs,
     )

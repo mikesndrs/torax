@@ -16,7 +16,9 @@
 
 import dataclasses
 from typing import Literal
+
 import chex
+import jax
 from jax import numpy as jnp
 from torax._src import array_typing
 from torax._src import state
@@ -65,7 +67,7 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
     """
 
     # No sawtooth redistribution if current is not being evolved.
-    if not static_runtime_params_slice.evolve_current:
+    if not dynamic_runtime_params_slice.numerics.evolve_current:
       return core_profiles_t
 
     assert dynamic_runtime_params_slice.mhd.sawtooth is not None
@@ -88,7 +90,7 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
     indices = jnp.arange(geo.rho_norm.shape[0])
     redistribution_mask = indices < idx_mixing
 
-    if static_runtime_params_slice.evolve_density:
+    if dynamic_runtime_params_slice.numerics.evolve_density:
       n_e_redistributed = flatten_profile.flatten_density_profile(
           rho_norm_q1,
           mixing_radius,
@@ -99,7 +101,7 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
       )
     else:
       n_e_redistributed = core_profiles_t.n_e
-    if static_runtime_params_slice.evolve_electron_heat:
+    if dynamic_runtime_params_slice.numerics.evolve_electron_heat:
       te_redistributed = flatten_profile.flatten_temperature_profile(
           rho_norm_q1,
           mixing_radius,
@@ -113,17 +115,10 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
     else:
       te_redistributed = core_profiles_t.T_e
     if (
-        static_runtime_params_slice.evolve_density
-        or static_runtime_params_slice.evolve_electron_heat
+        dynamic_runtime_params_slice.numerics.evolve_density
+        or dynamic_runtime_params_slice.numerics.evolve_electron_heat
     ):
-      (
-          n_i_redistributed,
-          n_impurity_redistributed,
-          Z_i,
-          Z_i_face,
-          Z_impurity,
-          Z_impurity_face,
-      ) = getters.get_ion_density_and_charge_states(
+      ions_redistributed = getters.get_updated_ions(
           static_runtime_params_slice,
           dynamic_runtime_params_slice,
           geo,
@@ -131,14 +126,19 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
           te_redistributed,
       )
     else:
-      n_i_redistributed = core_profiles_t.n_i
-      n_impurity_redistributed = core_profiles_t.n_impurity
-      Z_i = core_profiles_t.Z_i
-      Z_i_face = core_profiles_t.Z_i_face
-      Z_impurity = core_profiles_t.Z_impurity
-      Z_impurity_face = core_profiles_t.Z_impurity_face
-
-    if static_runtime_params_slice.evolve_ion_heat:
+      ions_redistributed = getters.Ions(
+          n_i=core_profiles_t.n_i,
+          n_impurity=core_profiles_t.n_impurity,
+          Z_i=core_profiles_t.Z_i,
+          Z_i_face=core_profiles_t.Z_i_face,
+          Z_impurity=core_profiles_t.Z_impurity,
+          Z_impurity_face=core_profiles_t.Z_impurity_face,
+          A_i=core_profiles_t.A_i,
+          A_impurity=core_profiles_t.A_impurity,
+          Z_eff=core_profiles_t.Z_eff,
+          Z_eff_face=core_profiles_t.Z_eff_face,
+      )
+    if dynamic_runtime_params_slice.numerics.evolve_ion_heat:
       ti_redistributed = flatten_profile.flatten_temperature_profile(
           rho_norm_q1,
           mixing_radius,
@@ -146,7 +146,7 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
           redistribution_params.flattening_factor,
           core_profiles_t.T_i,
           core_profiles_t.n_i,
-          n_i_redistributed,
+          ions_redistributed.n_i,
           geo,
       )
     else:
@@ -168,12 +168,12 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
         T_e=te_redistributed,
         psi=psi_redistributed,
         n_e=n_e_redistributed,
-        n_i=n_i_redistributed,
-        n_impurity=n_impurity_redistributed,
-        Z_i=Z_i,
-        Z_i_face=Z_i_face,
-        Z_impurity=Z_impurity,
-        Z_impurity_face=Z_impurity_face,
+        n_i=ions_redistributed.n_i,
+        n_impurity=ions_redistributed.n_impurity,
+        Z_i=ions_redistributed.Z_i,
+        Z_i_face=ions_redistributed.Z_i_face,
+        Z_impurity=ions_redistributed.Z_impurity,
+        Z_impurity_face=ions_redistributed.Z_impurity_face,
         q_face=psi_calculations.calc_q_face(geo, psi_redistributed),
         s_face=psi_calculations.calc_s_face(geo, psi_redistributed),
     )
@@ -185,7 +185,8 @@ class SimpleRedistribution(redistribution_base.RedistributionModel):
     return isinstance(other, SimpleRedistribution)
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params.RedistributionDynamicRuntimeParams):
   """Dynamic runtime params for simple redistribution model.
 

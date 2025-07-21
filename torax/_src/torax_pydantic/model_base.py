@@ -18,11 +18,11 @@ from collections.abc import Set
 import functools
 import inspect
 from typing import Any, Final, Mapping, Sequence, TypeAlias
+
 import jax
 import pydantic
 import treelib
 from typing_extensions import Self
-
 
 TIME_INVARIANT: Final[str] = '_pydantic_time_invariant_field'
 JAX_STATIC: Final[str] = '_pydantic_jax_static_field'
@@ -229,7 +229,8 @@ class BaseModelFrozen(pydantic.BaseModel):
 
     This method will invalidate all `functools.cached_property` caches of
     all ancestral models in the nested tree, as these could have a dependency
-    on the updated model. In addition, these nodes will be re-validated.
+    on the updated model. In addition, these ancestral models will be
+    re-validated.
 
     If the value to be updated is a field of a Pydantic model, any value
     conformable to the field type will be accepted.
@@ -273,16 +274,14 @@ class BaseModelFrozen(pydantic.BaseModel):
       value = pydantic.TypeAdapter(field_type, config=cfg).validate_python(
           value
       )
-
       model.__dict__[value_name] = value
-      # Re-validate the model. Will throw an exception if the new value is
-      # invalid.
-      model.__class__.from_dict(model.to_dict())
 
     for model in mutated_models:
       for model_ancestral in model_tree.rsearch(id(model)):
-        node = model_tree.get_node(model_ancestral)
-        node.data.clear_cached_properties()
+        m = model_tree.get_node(model_ancestral).data
+        m.clear_cached_properties()
+        # Re-validate all ancestral models.
+        m.__class__.from_dict(m.to_dict())
 
   def _lookup_path(self, paths: Sequence[str]) -> Self:
     """Returns the model at the given path."""

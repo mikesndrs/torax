@@ -14,17 +14,20 @@
 
 """Base class for conductivity models."""
 import abc
+import dataclasses
 
 import chex
+import jax
 from torax._src import state
-from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.torax_pydantic import torax_pydantic
 
 
-@chex.dataclass(kw_only=True, frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(kw_only=True, frozen=True)
 class Conductivity:
   """Values returned by a conductivity model."""
+
   sigma: chex.Array
   sigma_face: chex.Array
 
@@ -35,7 +38,6 @@ class ConductivityModel(abc.ABC):
   @abc.abstractmethod
   def calculate_conductivity(
       self,
-      dynamic_runtime_params_slice: runtime_params_slice.DynamicRuntimeParamsSlice,
       geometry: geometry_lib.Geometry,
       core_profiles: state.CoreProfiles,
   ) -> Conductivity:

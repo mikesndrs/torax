@@ -17,13 +17,15 @@
 This is the dataclass runtime config exposed to the user. The actual model gets
 a time-interpolated version of this config via the DynamicRuntimeParams.
 """
-import chex
+import dataclasses
+
+import jax
 from torax._src import array_typing
-from torax._src import jax_utils
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams:
   """Input params for the transport model which can be used as compiled args."""
 
@@ -33,6 +35,8 @@ class DynamicRuntimeParams:
   D_e_max: float
   V_e_min: float
   V_e_max: float
+  rho_min: array_typing.ScalarFloat
+  rho_max: array_typing.ScalarFloat
   apply_inner_patch: array_typing.ScalarBool
   D_e_inner: array_typing.ScalarFloat
   V_e_inner: array_typing.ScalarFloat
@@ -47,10 +51,3 @@ class DynamicRuntimeParams:
   rho_outer: array_typing.ScalarFloat
   smoothing_width: float
   smooth_everywhere: bool
-
-  def __post_init__(self):
-    jax_utils.error_if(
-        self.rho_outer,
-        self.rho_outer <= self.rho_inner,
-        'rho_outer must be greater than rho_inner.',
-    )

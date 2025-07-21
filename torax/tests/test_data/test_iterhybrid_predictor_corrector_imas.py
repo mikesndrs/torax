@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Identical to test_iterhybrid_predictor_corrector but EQDSK geometry input."""
+"""Identical to test_iterhybrid_predictor_corrector but IMAS geometry input."""
 import copy
-from torax.tests.test_data import test_iterhybrid_predictor_corrector
 
+from torax.tests.test_data import test_iterhybrid_predictor_corrector
 
 CONFIG = copy.deepcopy(test_iterhybrid_predictor_corrector.CONFIG)
 
 CONFIG['geometry'] = {
-        'geometry_type': 'imas',
-        'equilibrium_object': 'ITERhybrid_COCOS17_IDS_ddv4.nc',
-        'Ip_from_parameters': True,
-    }
+    'geometry_type': 'imas',
+    'imas_filepath': 'ITERhybrid_COCOS17_IDS_ddv4.nc',
+    'Ip_from_parameters': True,
+}

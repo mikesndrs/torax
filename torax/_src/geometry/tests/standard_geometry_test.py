@@ -11,10 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import dataclasses
 import os
-import importlib
-import pytest
+
 from absl.testing import absltest
 from absl.testing import parameterized
 import jax
@@ -79,12 +78,11 @@ class GeometryTest(parameterized.TestCase):
     config = geometry_pydantic_model.EQDSKConfig(geometry_file=geometry_file)
     config.build_geometry()
 
-  @parameterized.parameters([
-      dict(equilibrium_object='ITERhybrid_COCOS17_IDS_ddv4.nc'),
-  ])
-  def test_build_standard_geometry_from_IMAS(self, equilibrium_object):
+  def test_build_standard_geometry_from_IMAS(self):
     """Test that the default IMAS geometry can be built."""
-    config = geometry_pydantic_model.IMASConfig(equilibrium_object=equilibrium_object)
+    config = geometry_pydantic_model.IMASConfig(
+        imas_filepath='ITERhybrid_COCOS17_IDS_ddv4.nc'
+    )
     config.build_geometry()
 
   def test_access_z_magnetic_axis_raises_error_for_chease_geometry(self):
@@ -140,7 +138,7 @@ class GeometryTest(parameterized.TestCase):
       'deltau',
       'deltal',
       'kappa',
-      'FtPQ',       # TODO(b/412965439)  remove support for LY files w/o FtPVQ.
+      'FtPQ',  # TODO(b/412965439)  remove support for LY files w/o FtPVQ.
       'zA',
       't',
   )

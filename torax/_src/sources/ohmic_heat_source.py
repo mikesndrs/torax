@@ -27,7 +27,6 @@ from torax._src.sources import runtime_params as runtime_params_lib
 from torax._src.sources import source as source_lib
 from torax._src.sources import source_profiles as source_profiles_lib
 
-
 # Default value for the model function to be used for the ohmic heat
 # source. This is also used as an identifier for the model function in
 # the default source config for Pydantic to "discriminate" against.
@@ -65,7 +64,6 @@ def ohmic_model_func(
   psidot = psi_calculations.calculate_psidot_from_psi_sources(
       psi_sources=psi_sources,
       sigma=conductivity.sigma,
-      sigma_face=conductivity.sigma_face,
       resistivity_multiplier=dynamic_runtime_params_slice.numerics.resistivity_multiplier,
       psi=core_profiles.psi,
       geo=geo,
@@ -100,6 +98,7 @@ class OhmicHeatSource(source_lib.Source):
 
 class OhmicHeatSourceConfig(base.SourceModelBase):
   """Configuration for the OhmicHeatSource."""
+
   model_name: Literal['standard'] = 'standard'
   mode: runtime_params_lib.Mode = runtime_params_lib.Mode.MODEL_BASED
 

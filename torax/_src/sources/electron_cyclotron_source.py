@@ -17,6 +17,7 @@ import dataclasses
 from typing import ClassVar, Literal
 
 import chex
+import jax
 import jax.numpy as jnp
 from torax._src import array_typing
 from torax._src import constants
@@ -31,7 +32,6 @@ from torax._src.sources import source
 from torax._src.sources import source_profiles
 from torax._src.torax_pydantic import torax_pydantic
 
-
 # Default value for the model function to be used for the electron cyclotron
 # source. This is also used as an identifier for the model function in
 # the default source config for Pydantic to "discriminate" against.
@@ -39,7 +39,8 @@ DEFAULT_MODEL_FUNCTION_NAME: str = "gaussian_lin_liu"
 
 
 # pylint: disable=invalid-name
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params_lib.DynamicRuntimeParams):
   """Runtime parameters for the electron-cyclotron source for a given time and geometry."""
 
@@ -110,9 +111,6 @@ def calc_heating_and_current(
       + jnp.log(core_profiles.T_e.value)
       + jnp.log(constants.CONSTANTS.keV2J)  # Convert T_e to J
       - jnp.log(core_profiles.n_e.value)
-      - jnp.log(
-          dynamic_runtime_params_slice.numerics.density_reference
-      )  # Convert n_e to m^-3
       + jnp.log(dynamic_source_runtime_params.current_drive_efficiency)
       + jnp.log(ec_power_density)
   )

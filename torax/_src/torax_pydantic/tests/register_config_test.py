@@ -12,13 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
-import importlib
+import dataclasses
 from typing import Literal
 
+from absl.testing import absltest
 from absl.testing import parameterized
 import chex
+import jax
 from torax._src import array_typing
 from torax._src import state
+from torax._src.config import config_loader
 from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry
 from torax._src.neoclassical.conductivity import base as conductivity_base
@@ -32,7 +35,8 @@ from torax._src.torax_pydantic import register_config
 from torax._src.torax_pydantic import torax_pydantic
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params.DynamicRuntimeParams):
   a: array_typing.ScalarFloat
   b: bool
@@ -62,6 +66,7 @@ def double_gas_puff_source(
 
 class NewGasPuffSourceModelConfig(source_base_pydantic_model.SourceModelBase):
   """New source model config."""
+
   model_name: Literal['test_model_function'] = 'test_model_function'
   a: torax_pydantic.TimeVaryingScalar = torax_pydantic.ValidatedDefault(1.0)
   b: bool = False
@@ -117,10 +122,10 @@ class DuplicateGasPuffSourceModelConfig(
 class RegisterConfigTest(parameterized.TestCase):
 
   def test_register_source_model_config(self):
-    config_name = 'test_iterhybrid_rampup'
-    test_config_path = '.tests.test_data.' + config_name
-    config_module = importlib.import_module(test_config_path, 'torax')
-    config = copy.deepcopy(config_module.CONFIG)
+    config_name = 'test_iterhybrid_rampup.py'
+    test_config_path = 'tests/test_data/' + config_name
+    config_module = config_loader.import_module(test_config_path)
+    config = copy.deepcopy(config_module['CONFIG'])
     # Register the new source model config against the gas puff source.
     register_config.register_source_model_config(
         NewGasPuffSourceModelConfig, 'gas_puff'
@@ -180,3 +185,6 @@ class RegisterConfigTest(parameterized.TestCase):
       register_config.register_source_model_config(
           NewGasPuffSourceModelConfig, 'foo_source'
       )
+
+if __name__ == '__main__':
+  absltest.main()

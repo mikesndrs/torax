@@ -12,19 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Sauter model for bootstrap current."""
-
+import dataclasses
 from typing import Literal
 
 import chex
+import jax
+import jax.numpy as jnp
+from torax._src import jax_utils
 from torax._src import state
 from torax._src.config import runtime_params_slice
+from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry as geometry_lib
+from torax._src.neoclassical import formulas
 from torax._src.neoclassical.bootstrap_current import base
 from torax._src.neoclassical.bootstrap_current import runtime_params
-from torax._src.sources import bootstrap_current_source
+from torax._src.physics import collisions
+
+# pylint: disable=invalid-name
 
 
-@chex.dataclass(frozen=True)
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
 class DynamicRuntimeParams(runtime_params.DynamicRuntimeParams):
   """Dynamic runtime params for the Sauter model."""
 
@@ -45,10 +53,9 @@ class SauterModel(base.BootstrapCurrentModel):
         dynamic_runtime_params_slice.neoclassical.bootstrap_current
     )
     assert isinstance(bootstrap_params, DynamicRuntimeParams)
-    result = bootstrap_current_source.calc_sauter_model(
+    result = _calculate_bootstrap_current(
         bootstrap_multiplier=bootstrap_params.bootstrap_multiplier,
-        density_reference=dynamic_runtime_params_slice.numerics.density_reference,
-        Z_eff_face=dynamic_runtime_params_slice.plasma_composition.Z_eff_face,
+        Z_eff_face=core_profiles.Z_eff_face,
         Z_i_face=core_profiles.Z_i_face,
         n_e=core_profiles.n_e,
         n_i=core_profiles.n_i,
@@ -85,3 +92,123 @@ class SauterModelConfig(base.BootstrapCurrentModelConfig):
 
   def build_model(self) -> SauterModel:
     return SauterModel()
+
+
+@jax_utils.jit
+def _calculate_bootstrap_current(
+    *,
+    bootstrap_multiplier: float,
+    Z_eff_face: chex.Array,
+    Z_i_face: chex.Array,
+    n_e: cell_variable.CellVariable,
+    n_i: cell_variable.CellVariable,
+    T_e: cell_variable.CellVariable,
+    T_i: cell_variable.CellVariable,
+    psi: cell_variable.CellVariable,
+    q_face: chex.Array,
+    geo: geometry_lib.Geometry,
+) -> base.BootstrapCurrent:
+  """Calculates j_bootstrap and j_bootstrap_face using the Sauter model."""
+  # pylint: disable=invalid-name
+
+  # Formulas from Sauter PoP 1999. Future work can include Redl PoP 2021
+  # corrections.
+
+  # Effective trapped particle fraction
+  f_trap = formulas.calculate_f_trap(geo)
+
+  # Spitzer conductivity
+  log_lambda_ei = collisions.calculate_log_lambda_ei(
+      T_e.face_value(), n_e.face_value()
+  )
+  log_lambda_ii = collisions.calculate_log_lambda_ii(
+      T_i.face_value(), n_i.face_value(), Z_i_face
+  )
+  nu_e_star = formulas.calculate_nu_e_star(
+      q=q_face,
+      geo=geo,
+      n_e=n_e.face_value(),
+      T_e=T_e.face_value(),
+      Z_eff=Z_eff_face,
+      log_lambda_ei=log_lambda_ei,
+  )
+  nu_i_star = formulas.calculate_nu_i_star(
+      q=q_face,
+      geo=geo,
+      n_i=n_i.face_value(),
+      T_i=T_i.face_value(),
+      Z_eff=Z_eff_face,
+      log_lambda_ii=log_lambda_ii,
+  )
+
+  # Calculate terms needed for bootstrap current
+  L31 = formulas.calculate_L31(f_trap, nu_e_star, Z_eff_face)
+  L32 = formulas.calculate_L32(f_trap, nu_e_star, Z_eff_face)
+  L34 = _calculate_L34(f_trap, nu_e_star, Z_eff_face)
+  alpha = _calculate_alpha(f_trap, nu_i_star)
+
+  # calculate bootstrap current
+  prefactor = -geo.F_face * bootstrap_multiplier * 2 * jnp.pi / geo.B_0
+
+  pe = n_e.face_value() * T_e.face_value() * 1e3 * 1.6e-19
+  pi = n_i.face_value() * T_i.face_value() * 1e3 * 1.6e-19
+
+  dpsi_drnorm = psi.face_grad()
+  dlnne_drnorm = n_e.face_grad() / n_e.face_value()
+  dlnni_drnorm = n_i.face_grad() / n_i.face_value()
+  dlnte_drnorm = T_e.face_grad() / T_e.face_value()
+  dlnti_drnorm = T_i.face_grad() / T_i.face_value()
+
+  global_coeff = prefactor[1:] / dpsi_drnorm[1:]
+  global_coeff = jnp.concatenate([jnp.zeros(1), global_coeff])
+
+  necoeff = L31 * pe
+  nicoeff = L31 * pi
+  tecoeff = (L31 + L32) * pe
+  ticoeff = (L31 + alpha * L34) * pi
+
+  j_bootstrap_face = global_coeff * (
+      necoeff * dlnne_drnorm
+      + nicoeff * dlnni_drnorm
+      + tecoeff * dlnte_drnorm
+      + ticoeff * dlnti_drnorm
+  )
+  j_bootstrap = geometry_lib.face_to_cell(j_bootstrap_face)
+
+  return base.BootstrapCurrent(
+      j_bootstrap=j_bootstrap,
+      j_bootstrap_face=j_bootstrap_face,
+  )
+
+
+def _calculate_L34(
+    f_trap: chex.Array,
+    nu_e_star: chex.Array,
+    Z_eff: chex.Array,
+) -> chex.Array:
+  """Calculates the L34 coefficient: Sauter PoP 1999 Eqs. 16a+b."""
+  ft34 = f_trap / (
+      1.0
+      + (1 - 0.1 * f_trap) * jnp.sqrt(nu_e_star)
+      + 0.5 * (1.0 - 0.5 * f_trap) * nu_e_star / Z_eff
+  )
+  return (
+      (1 + 1.4 / (Z_eff + 1)) * ft34
+      - 1.9 / (Z_eff + 1) * ft34**2
+      + 0.3 / (Z_eff + 1) * ft34**3
+      + 0.2 / (Z_eff + 1) * ft34**4
+  )
+
+
+def _calculate_alpha(
+    f_trap: chex.Array,
+    nu_i_star: chex.Array,
+) -> chex.Array:
+  """Calculates the alpha coefficient: Sauter PoP 1999 Eqs. 17a+b."""
+  alpha0 = -1.17 * (1 - f_trap) / (1 - 0.22 * f_trap - 0.19 * f_trap**2)
+  alpha = (
+      (alpha0 + 0.25 * (1 - f_trap**2) * jnp.sqrt(nu_i_star))
+      / (1 + 0.5 * jnp.sqrt(nu_i_star))
+      + 0.315 * nu_i_star**2 * f_trap**6
+  ) / (1 + 0.15 * nu_i_star**2 * f_trap**6)
+  return alpha
