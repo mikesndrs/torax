@@ -28,11 +28,12 @@ try:
 except ImportError:
     IDSToplevel = Any
 import torax
-from torax import post_processing
+from torax._src.output_tools import post_processing
 from torax._src.config import build_runtime_params
-from torax._src.orchestration.run_simulation import prep_simulation
-from torax.tests.test_lib import sim_test_case
-from torax._src.geometry.imas import load_IMAS_data
+from torax._src.orchestration.run_simulation import prepare_simulation
+from torax._src.orchestration import run_loop
+from torax._src.test_utils import sim_test_case
+from torax._src.geometry.imas import _load_imas_data
 from torax.imas_tools.core_profiles import core_profiles_from_IMAS, core_profiles_to_IMAS, update_dict
 from torax._src.torax_pydantic import model_config
 
@@ -55,19 +56,19 @@ class Core_profilesTest(sim_test_case.SimTestCase):
 
         #Has to be replaced to load open access data
         # path = '/home/ITER/belloum/git/torax_dir/torax/torax/data/third_party/geo/scenario.yaml' #Specify path to load core_profiles -> should we generate example core_profiles ?
-        path = 'torax/data/third_party/geo/core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
-        core_profiles_in = load_IMAS_data(path, "core_profiles")
+        path = 'core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
+        core_profiles_in = _load_imas_data(path, "core_profiles")
         # core_profiles_in = load_ids_from_Data_entry(path, "core_profiles")
 
         # Modifying the input config profiles_conditions class
-        core_profiles_conditions = core_profiles_from_IMAS(core_profiles_in)
+        core_profiles_conditions = core_profiles_from_IMAS(core_profiles_in, read_psi_from_geo=True)
         # config.update_fields(core_profiles_conditions)
         config_with_IMAS_profiles = update_dict(config, core_profiles_conditions) #Is it better to do like this, or first convert to ToraxConfig and use config.config_args.recursive_replace or maybe another function that does the same instead ?
         # Or use ToraxConfig.update_fields ?
         torax_config = model_config.ToraxConfig.from_dict(config_with_IMAS_profiles)
 
         #Run Sim
-        results = torax.run_simulation(torax_config)
+        _, results = torax.run_simulation(torax_config)
         # Check that the simulation completed successfully.
         if results.sim_error != torax.SimError.NO_ERROR:
           raise ValueError(
@@ -96,8 +97,8 @@ class Core_profilesTest(sim_test_case.SimTestCase):
       #Has to be replaced to load open access data
       # path = '/home/ITER/belloum/git/torax_dir/torax/torax/data/third_party/geo/scenario.yaml' #Specify path to load core_profiles -> should we generate example core_profiles ?
       # path = 'torax/data/third_party/geo/core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
-      path = 'torax/data/third_party/geo/core_profiles_15MA_DT_50_50_flat_top_slice.nc' #Using another input core_profiles with more radial resolution.
-      core_profiles_in = load_IMAS_data(path, "core_profiles")
+      path = 'core_profiles_15MA_DT_50_50_flat_top_slice.nc' #Using another input core_profiles with more radial resolution.
+      core_profiles_in = _load_imas_data(path, "core_profiles")
       # core_profiles_in = load_ids_from_Data_entry(path, "core_profiles")
       rhon_in = core_profiles_in.profiles_1d[0].grid.rho_tor_norm
 
@@ -110,37 +111,37 @@ class Core_profilesTest(sim_test_case.SimTestCase):
       torax_config = model_config.ToraxConfig.from_dict(config_with_IMAS_profiles)
 
       #Init sim from config
-      state_history = prep_simulation(torax_config)
+      _, sim_state, _, _ = prepare_simulation(torax_config)
 
       #Read output values
       torax_mesh=torax_config.geometry.build_provider.torax_mesh
       cell_centers = torax_mesh.cell_centers
       face_centers = torax_mesh.face_centers
       #Compare the initial core_profiles with the ids profiles
-      init_core_profiles = state_history[3].core_profiles
+      init_core_profiles = sim_state.core_profiles
       np.testing.assert_allclose(
-            np.interp(rhon_in, face_centers, init_core_profiles["temp_el"].face_value())*1e3,
+            np.interp(rhon_in, face_centers, init_core_profiles.T_e.face_value())*1e3,
             core_profiles_in.profiles_1d[0].electrons.temperature,
             rtol=rtol,
             atol=atol,
             err_msg="Te profile failed",
         )
       np.testing.assert_allclose(
-            np.interp(rhon_in, face_centers, init_core_profiles['temp_ion'].face_value()),
+            np.interp(rhon_in, face_centers, init_core_profiles.T_i.face_value()),
             core_profiles_in.profiles_1d[0].t_i_average/1e3,
             rtol=rtol,
             atol=atol,
             err_msg="Ti profile failed",
         )
       np.testing.assert_allclose(
-            np.interp(rhon_in, face_centers, init_core_profiles["ne"].face_value()),
-            core_profiles_in.profiles_1d[0].electrons.density/1e20,
+            np.interp(rhon_in, face_centers, init_core_profiles.n_e.face_value()),
+            core_profiles_in.profiles_1d[0].electrons.density,
             rtol=rtol,
             atol=atol,
             err_msg="ne profile failed",
         )
       np.testing.assert_allclose(
-            np.interp(rhon_in, face_centers, init_core_profiles["psi"].face_value()),
+            np.interp(rhon_in, face_centers, init_core_profiles.psi.face_value()),
             core_profiles_in.profiles_1d[0].grid.psi,
             rtol=rtol,
             atol=atol,
@@ -163,8 +164,8 @@ class Core_profilesTest(sim_test_case.SimTestCase):
       config = self._get_config_dict(config_name)
       #Has to be replaced to load open access data
       # path = '/home/ITER/belloum/git/torax_dir/torax/torax/data/third_party/geo/scenario.yaml' #Specify path to load core_profiles -> should we generate example core_profiles ?
-      path = 'torax/data/third_party/geo/core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
-      core_profiles_in = load_IMAS_data(path, "core_profiles")
+      path = 'core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
+      core_profiles_in = _load_imas_data(path, "core_profiles")
       # core_profiles_in = load_ids_from_Data_entry(path, "core_profiles")
 
       # Modifying the input config profiles_conditions class
@@ -175,28 +176,28 @@ class Core_profilesTest(sim_test_case.SimTestCase):
 
       #Init sim from config
       (
-        static_runtime_params_slice,
-        dynamic_runtime_params_slice_provider,
-        geometry_provider,
-        initial_state,
-        restart_case,
-        step_fn,
-        source_models,
-      ) = prep_simulation(torax_config)
+      dynamic_runtime_params_slice_provider,
+      initial_state,
+      post_processed_outputs,
+      step_fn,
+      ) = prepare_simulation(torax_config)
 
-      sim_state, sim_error = step_fn(
-          static_runtime_params_slice,
-          dynamic_runtime_params_slice_provider,
-          geometry_provider,
-          initial_state,
-      )
+      state_history, post_processed_outputs_history, sim_error = run_loop.run_loop(
+        dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
+        initial_state=initial_state,
+        initial_post_processed_outputs=post_processed_outputs,
+        step_fn=step_fn,
+        log_timestep_info=False,
+        progress_bar=False,
+       )
 
       if sim_error != torax.SimError.NO_ERROR:
           raise ValueError(
               f'TORAX failed to run the simulation with error: {sim_error}.'
           )
-
-      core_profiles_to_IMAS(ids_out, sim_state)
+      post_processed_outputs = post_processed_outputs_history[-1]
+      final_sim_state = state_history[-1]
+      core_profiles_to_IMAS(post_processed_outputs, final_sim_state, ids_out)
 
 
 
