@@ -36,6 +36,10 @@ from torax._src.torax_pydantic import model_config
 from torax._src.transport_model import pydantic_model_base as transport_pydantic_model_base
 from torax._src.transport_model import quasilinear_transport_model
 from torax._src.transport_model import runtime_params
+<<<<<<< HEAD
+=======
+from torax._src.transport_model import transport_model as transport_model_lib
+>>>>>>> upstream/main
 
 constants = constants_module.CONSTANTS
 jax.config.update('jax_enable_x64', True)

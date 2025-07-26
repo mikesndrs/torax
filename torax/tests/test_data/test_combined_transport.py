@@ -12,10 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 """Combined transport model:
 - Constant for ρ < 0.1
 - BgB + critical gradient for 0.1 < ρ < 0.9
 - constant for ρ > 0.9
+=======
+"""Combined transport mode.
+
+- Constant for rho_norm < 0.3
+- BgB + critical gradient for 0.1 < rho_norm < 0.9
+- constant for rho_norm in pedestal
+>>>>>>> upstream/main
 """
 
 import copy
@@ -40,6 +48,11 @@ CONFIG['transport'] = {
         },
         {'model_name': 'bohm-gyrobohm', 'rho_min': 0.1, 'rho_max': 0.9},
         {'model_name': 'CGM', 'rho_min': 0.1, 'rho_max': 0.9},
+<<<<<<< HEAD
+=======
+    ],
+    'pedestal_transport_models': [
+>>>>>>> upstream/main
         {
             'model_name': 'constant',
             # These values are set to something we made up for this test
@@ -47,9 +60,16 @@ CONFIG['transport'] = {
             'chi_e': 0.5,
             'D_e': 0.2,
             'V_e': 0.0,
+<<<<<<< HEAD
             'rho_min': 0.8,
         },
     ],
     # Smoothing, clipping etc are all set on the Combined model, not the components
+=======
+        },
+    ],
+    # Smoothing, clipping etc are all set on the Combined model, not the
+    # components
+>>>>>>> upstream/main
     'smoothing_width': 0.05,
 }

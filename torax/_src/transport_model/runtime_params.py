@@ -17,7 +17,9 @@
 This is the dataclass runtime config exposed to the user. The actual model gets
 a time-interpolated version of this config via the DynamicRuntimeParams.
 """
-import chex
+import dataclasses
+
+import jax
 from torax._src import array_typing
 
 
@@ -33,8 +35,13 @@ class DynamicRuntimeParams:
   D_e_max: float
   V_e_min: float
   V_e_max: float
+<<<<<<< HEAD
   rho_min: float
   rho_max: float
+=======
+  rho_min: array_typing.ScalarFloat
+  rho_max: array_typing.ScalarFloat
+>>>>>>> upstream/main
   apply_inner_patch: array_typing.ScalarBool
   D_e_inner: array_typing.ScalarFloat
   V_e_inner: array_typing.ScalarFloat

@@ -16,7 +16,7 @@
 
 This module saves immutable constants used in various calculations.
 """
-
+import dataclasses
 from typing import Final, Mapping
 
 import chex

@@ -29,6 +29,7 @@ from torax._src.output_tools import output
 from torax._src.output_tools import post_processing
 from torax._src.sources import source_profile_builders
 from torax._src.torax_pydantic import file_restart as file_restart_pydantic_model
+from torax._src.transport_model import transport_coefficients_builder
 import xarray as xr
 
 
@@ -89,6 +90,20 @@ def _get_initial_state(
           sigma=initial_core_profiles.sigma,
           sigma_face=initial_core_profiles.sigma_face,
       ),
+<<<<<<< HEAD
+=======
+  )
+
+  transport_coeffs = (
+      transport_coefficients_builder.calculate_total_transport_coeffs(
+          physics_models.pedestal_model,
+          physics_models.transport_model,
+          physics_models.neoclassical_models,
+          dynamic_runtime_params_slice,
+          geo,
+          initial_core_profiles,
+      )
+>>>>>>> upstream/main
   )
 
   return sim_state.ToraxSimState(

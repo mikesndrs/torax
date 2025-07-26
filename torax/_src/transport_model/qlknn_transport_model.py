@@ -30,6 +30,10 @@ from torax._src.transport_model import qlknn_10d
 from torax._src.transport_model import qlknn_model_wrapper
 from torax._src.transport_model import qualikiz_based_transport_model
 from torax._src.transport_model import runtime_params as runtime_params_lib
+<<<<<<< HEAD
+=======
+from torax._src.transport_model import transport_model as transport_model_lib
+>>>>>>> upstream/main
 import typing_extensions
 
 
@@ -101,7 +105,10 @@ class QLKNNRuntimeConfigInputs:
     assert isinstance(transport_dynamic_runtime_params, DynamicRuntimeParams)
 
     return QLKNNRuntimeConfigInputs(
+<<<<<<< HEAD
         Z_eff_face=dynamic_runtime_params_slice.plasma_composition.Z_eff_face,
+=======
+>>>>>>> upstream/main
         transport=transport_dynamic_runtime_params,
         Ped_top=pedestal_model_output.rho_norm_ped_top,
         set_pedestal=dynamic_runtime_params_slice.pedestal.set_pedestal,
@@ -200,7 +207,12 @@ class QLKNNTransportModel(
       transport_dynamic_runtime_params: Input runtime parameters for this
         transport model. Can change without triggering a JAX recompilation.
       dynamic_runtime_params_slice: Input runtime parameters for all components
+<<<<<<< HEAD
         of the simulation that can change without triggering a JAX recompilation.
+=======
+        of the simulation that can change without triggering a JAX
+        recompilation.
+>>>>>>> upstream/main
       geo: Geometry of the torus.
       core_profiles: Core plasma profiles.
       pedestal_model_output: Output of the pedestal model.

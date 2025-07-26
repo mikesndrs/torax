@@ -17,7 +17,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from torax._src.geometry import pydantic_model as geometry_pydantic_model
-from torax._src.neoclassical import pydantic_model as neoclassical_pydantic_model
 from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.sources import pydantic_model as sources_pydantic_model
 from torax._src.sources import source as source_lib

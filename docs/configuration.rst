@@ -615,8 +615,14 @@ geometry
     provided with a specific COCOS value.
 
 * ``'imas'``
+<<<<<<< HEAD
     Loads an IMAS netCDF file containing an equilibrium Interface Data Structure (IDS) or directly the equilibrium IDS on the fly.
     It handles IDSs in Data Dictionary version 4.0.0.
+=======
+    Loads an IMAS netCDF file containing an equilibrium Interface Data Structure
+    (IDS) or directly the equilibrium IDS on the fly. It handles IDSs in Data
+    Dictionary version 4.0.0.
+>>>>>>> upstream/main
 
 Geometry dicts for all geometry types can contain the following additional keys.
 
@@ -704,6 +710,7 @@ It is only recommended to change the default values if issues arise.
   defining geometry terms at the LCFS on the TORAX grid. Needed to avoid
   divergent integrations in diverted geometries.
 
+<<<<<<< HEAD
 Geometry dicts for IMAS geometry require one of the following additional keys.
 
 ``imas_filepath`` (str)
@@ -711,6 +718,18 @@ Geometry dicts for IMAS geometry require one of the following additional keys.
 
 ``imas_uri`` (str)
   Sets the path of the IMAS data entry containing the geometry data in an equilibrium IDS to be loaded.
+=======
+Geometry dicts for IMAS geometry require one and only one of the following
+additional keys.
+
+``imas_filepath`` (str)
+  Sets the path of the IMAS netCDF file containing the geometry data in an
+  equilibrium IDS to be loaded.
+
+``imas_uri`` (str)
+  Sets the path of the IMAS data entry containing the geometry data in an
+  equilibrium IDS to be loaded.
+>>>>>>> upstream/main
 
 ``equilibrium_object`` (imas.ids_toplevel.IDSToplevel)
   An equilibrium IDS object that can be inserted directly.
@@ -883,7 +902,11 @@ constant
 ^^^^^^^^
 
 Runtime parameters for the prescribed transport model. This model can be used
+<<<<<<< HEAD
 to implement constant coefficients (e.g. `chi_i` = 1.0 for all rho), as well as
+=======
+to implement constant coefficients (e.g. ``chi_i`` = 1.0 for all rho), as well as
+>>>>>>> upstream/main
 time-varying prescribed transport profiles of arbitrary form (such as an
 exponential decay) using the time-varying-array syntax.
 
@@ -1086,21 +1109,51 @@ combined
 
 A combined (additive) model, where the total transport coefficients are
 calculated by summing contributions from a list of component models. Each
+<<<<<<< HEAD
 component model is active only within its defined radial domain, set using
 ``rho_min``` and ``rho_max``. These zones can be overlapping or
 non-overlapping; in regions of overlap, the total transport coefficients are
 computed by adding the contributions from component models active at those
 coordinates. Post-processing (clipping and smoothing) is performed on the
 summed value.
+=======
+component model is active only within its defined radial domain, which can
+be overlapping or non-overlapping; in regions of overlap, the total
+transport coefficients are computed by adding the contributions from
+component models active at those coordinates.
+For individual core transport models defined in ``transport_models``, the active
+domain (where transport coefficients are non-zero) is set by ``rho_min``` and
+``rho_max``. If a pedestal is active, the active domain is then limited by
+``rho_norm_ped_top`` if ``rho_norm_ped_top`` is less than ``rho_max``.
+``rho_norm_ped_top`` is set in the ``pedestal`` section of the config.
+For models in ``pedestal_transport_models``, the active domain is only for
+radii above ``rho_norm_ped_top``.
+Post-processing (clipping and smoothing) is performed on the summed
+values from all component models, including in the pedestal.
+>>>>>>> upstream/main
 
 The runtime parameters are as follows.
 
 ``transport_models`` (list[dict])
+<<<<<<< HEAD
   A list containing config dicts for the component transport models.
 
    .. warning::
     TORAX will throw a ``ValueError`` if any of the component transport
     model config have ``apply_inner_patch`` or ``apply_outer_patch`` set
+=======
+  A list containing config dicts for the component models for turbulent
+  transport in the core.
+
+``pedestal_transport_models`` (list[dict])
+  A list containing config dicts for the component models for turbulent
+  transport in the pedestal.
+
+
+   .. warning::
+    TORAX will throw a ``ValueError`` if any of the component transport
+    model configs have ``apply_inner_patch`` or ``apply_outer_patch`` set
+>>>>>>> upstream/main
     to True. Patches must be set in the config of the ``combined`` model
     only.
 
@@ -1111,6 +1164,7 @@ The runtime parameters are as follows.
 Example:
 
 .. code-block:: python
+<<<<<<< HEAD
 
     'transport': {
       'model_name': 'combined',
@@ -1138,14 +1192,56 @@ Example:
 This would produce a ``chi_i`` profile that looks like the following.
 
 .. image:: images/combined_chi_i.png
+=======
+    ...
+    'transport': {
+        'model_name': 'combined',
+        'transport_models': [
+            {
+               'model_name': 'constant',
+               'chi_i': 1.0,
+               'rho_max': 0.3,
+            },
+            {
+                'model_name': 'constant',
+                'chi_i': 2.0,
+                'rho_min': 0.2,
+            },
+        ],
+        'pedestal_transport_models': [
+            {
+                'model_name': 'constant',
+                'chi_i': 0.5,
+            },
+        ],
+      },
+      'pedestal': {
+          'model_name': 'set_T_ped_n_ped',
+          'set_pedestal': True,
+          'rho_norm_ped_top': 0.9,
+          'n_e_ped': 0.8,
+          'n_e_ped_is_fGW': True,
+      },
+      ...
+
+This would produce a ``chi_i`` profile that looks like the following.
+
+.. image:: images/combined_transport_example.png
+>>>>>>> upstream/main
   :width: 400
   :alt: A stepwise constant chi_i profile
 
 Note that in the region :math:`[0, 0.2]`, only the first component is active,
 so ``chi_i = 1.0``. In :math:`(0.2, 0.3]` the first two components are both
+<<<<<<< HEAD
 active, leading to a combined value of ``chi_i = 3.0``. In :math:`(0.3, 0.5]`,
 only the second model is active (``chi_i = 2.0``), and in :math:`(0.5, 1.0]`
 only the fourth model is active (``chi_i = 0.5``).
+=======
+active, leading to a combined value of ``chi_i = 3.0``. In :math:`(0.3, 0.9]`,
+only the second model is active (``chi_i = 2.0``), and in :math:`(0.9, 1.0]`
+only the pedestal transport model is active (``chi_i = 0.5``).
+>>>>>>> upstream/main
 
 
 sources
@@ -1715,12 +1811,21 @@ transport
   supported:
 
   * ``'zeros'``
+<<<<<<< HEAD
     Sets all neoclassical transport coefficients to zero. This is the default.
+=======
+    Sets all neoclassical transport coefficients to zero.
+>>>>>>> upstream/main
 
   * ``'angioni_sauter'``
     The Angioni-Sauter neoclassical transport model from
     `C. Angioni and O. Sauter, Phys. Plasmas 7, 1224 (2000) <https://doi.org/10.1063/1.873918>`_.
+<<<<<<< HEAD
     This model does not have any additional configurable parameters.
+=======
+     This is the default model. This model does not have any additional
+     configurable parameters.
+>>>>>>> upstream/main
 
 Additional Notes
 ================
@@ -1756,12 +1861,19 @@ Using IMAS input data
 Loading Geometry
 ^^^^^^^^^^^^^^^^
 
+<<<<<<< HEAD
 The geometry in TORAX can be constructed from IMAS equilibium IDSs. The specific arguments to load an equilibrium IDS with TORAX
 are specified in :ref:`geometry_doc`.
+=======
+The geometry in TORAX can be constructed from IMAS equilibium IDSs. The specific
+arguments to load an equilibrium IDS with TORAX are specified in
+:ref:`geometry_doc`.
+>>>>>>> upstream/main
 
 There are three main methods to load IMAS equilibrium:
 
 * Using IMAS netCDF file (imas_filepath).
+<<<<<<< HEAD
   This is the main method as it does not require the optional dependency to imas-core. IMAS equilibrium IDSs
   can be saved on disk using the ``save_netcdf()`` function from |util|. The path of the file can then be provided in the config
   to run TORAX with this geometry.
@@ -1774,6 +1886,19 @@ There are three main methods to load IMAS equilibrium:
   This method can be more convenient when running TORAX in a workflow for example. Using this method the IDS can be provided
   externally or pre-loaded using one of the ``load_IMAS_data()`` and ``load_IMAS_from_data_entry()`` functions from |util|, and then
   provided in the config dict as the value of the ``equilibrium_object``. The latter function requires the optional dependency to imas-core.
+=======
+  This is the main method as it does not require the optional dependency to
+  imas-core. The path of the file can then be provided in the config to run
+  TORAX with this geometry. An example yaml input file for this function can be
+  found at |example_imas_scenario|.
+
+* Using IMAS uri (imas_uri).
+  This method does require the imas-core dependency. It loads the
+  equilibrium data from the given IDS with a backend of choice.
+
+* Providing the equilibium IDS on the fly (equilibrium_object).
+  Using this method the IDS can be provided externally or pre-loaded.
+>>>>>>> upstream/main
 
 Config example
 ==============

@@ -23,6 +23,7 @@ from torax._src import math_utils
 from torax._src.config import build_runtime_params
 from torax._src.core_profiles import initialization
 from torax._src.geometry import geometry
+from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.sources import generic_current_source
 from torax._src.sources import runtime_params as runtime_params_lib

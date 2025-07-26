@@ -14,6 +14,10 @@
 
 """The BohmGyroBohmModel class."""
 import dataclasses
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/main
 import jax
 from jax import numpy as jnp
 from torax._src import array_typing
@@ -74,7 +78,12 @@ class BohmGyroBohmTransportModel(transport_model_lib.TransportModel):
       transport_dynamic_runtime_params: Input runtime parameters for this
         transport model. Can change without triggering a JAX recompilation.
       dynamic_runtime_params_slice: Input runtime parameters for all components
+<<<<<<< HEAD
         of the simulation that can change without triggering a JAX recompilation.
+=======
+        of the simulation that can change without triggering a JAX
+        recompilation.
+>>>>>>> upstream/main
       geo: Geometry of the torus.
       core_profiles: Core plasma profiles.
       pedestal_model_output: Output of the pedestal model.

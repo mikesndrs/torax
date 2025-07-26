@@ -73,10 +73,14 @@ class PydanticModelTest(parameterized.TestCase):
 
   def test_build_qualikiz_transport_model(self):
     try:
+<<<<<<< HEAD
       # pylint: disable=g-import-not-at-top
       from torax._src.transport_model import qualikiz_transport_model
 
       # pylint: enable=g-import-not-at-top
+=======
+      from torax._src.transport_model import qualikiz_transport_model  # pylint: disable=g-import-not-at-top
+>>>>>>> upstream/main
     except ImportError:
       self.skipTest('Qualikiz transport model is not available.')
 

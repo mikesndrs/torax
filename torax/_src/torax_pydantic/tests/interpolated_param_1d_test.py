@@ -14,6 +14,8 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import chex
+import jax
 import numpy as np
 import pydantic
 from torax._src import interpolated_param

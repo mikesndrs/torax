@@ -17,8 +17,13 @@
 The pedestal model calculates quantities relevant to the pedestal.
 """
 import abc
+<<<<<<< HEAD
 
 import chex
+=======
+import dataclasses
+
+>>>>>>> upstream/main
 import jax
 import jax.numpy as jnp
 from torax._src import array_typing

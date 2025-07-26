@@ -84,7 +84,12 @@ class QualikizTransportModel(
       transport_dynamic_runtime_params: Input runtime parameters for this
         transport model. Can change without triggering a JAX recompilation.
       dynamic_runtime_params_slice: Input runtime parameters for all components
+<<<<<<< HEAD
         of the simulation that can change without triggering a JAX recompilation.
+=======
+        of the simulation that can change without triggering a JAX
+        recompilation.
+>>>>>>> upstream/main
       geo: Geometry of the torus.
       core_profiles: Core plasma profiles.
       pedestal_model_output: Output of the pedestal model.
@@ -107,7 +112,11 @@ class QualikizTransportModel(
     assert isinstance(transport_dynamic_runtime_params, DynamicRuntimeParams)
 
     qualikiz_inputs = self._prepare_qualikiz_inputs(
+<<<<<<< HEAD
         transport=transport,
+=======
+        transport=transport_dynamic_runtime_params,
+>>>>>>> upstream/main
         geo=geo,
         core_profiles=core_profiles,
     )
@@ -233,6 +242,7 @@ def _extract_qualikiz_plan(
 
   Args:
       qualikiz_inputs: Precomputed physics data.
+      transport: transport_model DynamicRuntimeParams,
       dynamic_runtime_params_slice: Runtime params at time t.
       geo: TORAX geometry object.
       core_profiles: TORAX CoreProfiles object, containing time-evolvable

@@ -18,7 +18,10 @@ from typing import Literal
 import chex
 import jax
 import jax.numpy as jnp
+<<<<<<< HEAD
 from torax._src import constants
+=======
+>>>>>>> upstream/main
 from torax._src import jax_utils
 from torax._src import state
 from torax._src.config import runtime_params_slice
@@ -119,8 +122,15 @@ def _calculate_bootstrap_current(
   f_trap = formulas.calculate_f_trap(geo)
 
   # Spitzer conductivity
+<<<<<<< HEAD
   lambda_ei = collisions.calculate_lambda_ei(T_e.face_value(), n_e.face_value())
   lambda_ii = collisions.calculate_lambda_ii(
+=======
+  log_lambda_ei = collisions.calculate_log_lambda_ei(
+      T_e.face_value(), n_e.face_value()
+  )
+  log_lambda_ii = collisions.calculate_log_lambda_ii(
+>>>>>>> upstream/main
       T_i.face_value(), n_i.face_value(), Z_i_face
   )
   nu_e_star = formulas.calculate_nu_e_star(

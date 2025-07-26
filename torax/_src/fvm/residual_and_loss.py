@@ -39,7 +39,6 @@ from torax._src.fvm import discrete_system
 from torax._src.fvm import fvm_conversions
 from torax._src.geometry import geometry
 from torax._src.sources import source_profiles
-from torax._src.transport_model import transport_model as transport_model_lib
 
 Block1DCoeffs: TypeAlias = block_1d_coeffs.Block1DCoeffs
 

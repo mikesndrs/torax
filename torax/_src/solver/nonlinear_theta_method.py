@@ -54,7 +54,12 @@ class DynamicNewtonRaphsonRuntimeParams(runtime_params.DynamicRuntimeParams):
   tau_min: float
 
 
+<<<<<<< HEAD
 @chex.dataclass(frozen=True)
+=======
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass(frozen=True)
+>>>>>>> upstream/main
 class StaticNewtonRaphsonRuntimeParams(runtime_params.StaticRuntimeParams):
   initial_guess_mode: int
   log_iterations: bool

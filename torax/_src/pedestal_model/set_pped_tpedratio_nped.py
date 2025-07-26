@@ -13,6 +13,10 @@
 # limitations under the License.
 """Pedestal model that specifies pressure, temperature ratio, and density."""
 import dataclasses
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/main
 import jax
 from jax import numpy as jnp
 from torax._src import array_typing

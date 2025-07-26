@@ -16,7 +16,7 @@
 import dataclasses
 import enum
 
-import chex
+import jax
 from torax._src import array_typing
 from torax._src import interpolated_param
 

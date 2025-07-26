@@ -14,8 +14,10 @@
 
 """Base classes for MHD models."""
 
-import chex
-from torax._src.mhd.sawtooth import sawtooth_model
+import dataclasses
+
+import jax
+from torax._src.mhd.sawtooth import sawtooth_models as sawtooth_models_lib
 
 
 @jax.tree_util.register_dataclass

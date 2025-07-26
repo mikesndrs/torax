@@ -13,6 +13,10 @@
 # limitations under the License.
 """Runtime params for conductivity models."""
 import dataclasses
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/main
 import jax
 
 

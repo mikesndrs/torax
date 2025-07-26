@@ -18,7 +18,10 @@ from typing import Literal
 import chex
 import jax
 import jax.numpy as jnp
+<<<<<<< HEAD
 from torax._src import constants
+=======
+>>>>>>> upstream/main
 from torax._src import jax_utils
 from torax._src import state
 from torax._src.fvm import cell_variable

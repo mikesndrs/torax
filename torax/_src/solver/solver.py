@@ -20,8 +20,12 @@ Abstract base class defining updates to State.
 import abc
 import functools
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/main
 import jax
+from torax._src import physics_models as physics_models_lib
 from torax._src import state
 from torax._src import xnp
 from torax._src.config import runtime_params_slice

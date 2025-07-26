@@ -18,7 +18,9 @@ import abc
 import functools
 
 import jax
-from torax._src import state as state_module
+from jax import numpy as jnp
+from torax._src import jax_utils
+from torax._src import state
 from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry
 from torax._src.time_step_calculator import runtime_params

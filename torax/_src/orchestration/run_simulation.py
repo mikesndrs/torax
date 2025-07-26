@@ -23,10 +23,10 @@ torax_config.update(updated_fields)
 new_sim_outputs = torax.run_simulation(torax_config)
 ```
 """
-
 from torax._src.config import build_runtime_params
 from torax._src.orchestration import initial_state as initial_state_lib
 from torax._src.orchestration import run_loop
+from torax._src.orchestration import sim_state
 from torax._src.orchestration import step_function
 from torax._src.output_tools import output
 from torax._src.output_tools import post_processing
@@ -58,9 +58,15 @@ def prepare_simulation(
   geometry_provider = torax_config.geometry.build_provider
   physics_models = torax_config.build_physics_models()
 
+<<<<<<< HEAD
     static_runtime_params_slice = (
         build_runtime_params.build_static_params_from_config(torax_config)
     )
+=======
+  static_runtime_params_slice = (
+      build_runtime_params.build_static_params_from_config(torax_config)
+  )
+>>>>>>> upstream/main
 
   solver = torax_config.solver.build_solver(
       static_runtime_params_slice=static_runtime_params_slice,
@@ -90,6 +96,7 @@ def prepare_simulation(
             dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
             geometry_provider=geometry_provider,
             step_fn=step_fn,
+<<<<<<< HEAD
         )
     )
     restart_case = True
@@ -104,6 +111,20 @@ def prepare_simulation(
         )
     )
     restart_case = False
+=======
+        )
+    )
+  else:
+    initial_state, post_processed_outputs = (
+        initial_state_lib.get_initial_state_and_post_processed_outputs(
+            t=torax_config.numerics.t_initial,
+            static_runtime_params_slice=static_runtime_params_slice,
+            dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
+            geometry_provider=geometry_provider,
+            step_fn=step_fn,
+        )
+    )
+>>>>>>> upstream/main
 
   return (
       dynamic_runtime_params_slice_provider,
@@ -118,12 +139,9 @@ def run_simulation(
     log_timestep_info: bool = False,
     progress_bar: bool = True,
 ) -> tuple[xr.DataTree, output.StateHistory]:
-    """Runs a TORAX simulation using the config and returns the outputs.
-    Args:
-      torax_config: The TORAX config to use for the simulation.
-      log_timestep_info: Whether to log the timestep information.
-      progress_bar: Whether to show a progress bar.
+  """Runs a TORAX simulation using the config and returns the outputs.
 
+<<<<<<< HEAD
   Returns:
     A tuple of the simulation outputs in the form of a DataTree and the state
     history which is intended for helpful use with debugging as it contains
@@ -145,14 +163,45 @@ def run_simulation(
       log_timestep_info=log_timestep_info,
       progress_bar=progress_bar,
   )
+=======
+  Args:
+    torax_config: The TORAX config to use for the simulation.
+    log_timestep_info: Whether to log the timestep information.
+    progress_bar: Whether to show a progress bar.
 
-    state_history = output.StateHistory(
-        state_history=state_history,
-        post_processed_outputs_history=post_processed_outputs_history,
-        sim_error=sim_error,
-        torax_config=torax_config,
-    )
+  Returns:
+    A tuple of the simulation outputs in the form of a DataTree and the state
+    history which is intended for helpful use with debugging as it contains
+    the `CoreProfiles`, `CoreTransport`, `CoreSources`, `Geometry`, and
+    `PostProcessedOutputs` dataclasses for each step of the simulation.
+  """
+  (
+      dynamic_runtime_params_slice_provider,
+      initial_state,
+      post_processed_outputs,
+      step_fn,
+  ) = prepare_simulation(torax_config)
+>>>>>>> upstream/main
 
+  state_history, post_processed_outputs_history, sim_error = run_loop.run_loop(
+      dynamic_runtime_params_slice_provider=dynamic_runtime_params_slice_provider,
+      initial_state=initial_state,
+      initial_post_processed_outputs=post_processed_outputs,
+      step_fn=step_fn,
+      log_timestep_info=log_timestep_info,
+      progress_bar=progress_bar,
+  )
+
+<<<<<<< HEAD
+=======
+  state_history = output.StateHistory(
+      state_history=state_history,
+      post_processed_outputs_history=post_processed_outputs_history,
+      sim_error=sim_error,
+      torax_config=torax_config,
+  )
+
+>>>>>>> upstream/main
   return (
       state_history.simulation_output_to_xr(),
       state_history,

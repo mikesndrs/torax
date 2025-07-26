@@ -14,6 +14,10 @@
 
 """The CriticalGradientModel class."""
 import dataclasses
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream/main
 import jax
 from jax import numpy as jnp
 from torax._src import array_typing
@@ -69,7 +73,12 @@ class CriticalGradientTransportModel(transport_model.TransportModel):
       transport_dynamic_runtime_params: Input runtime parameters for this
         transport model. Can change without triggering a JAX recompilation.
       dynamic_runtime_params_slice: Input runtime parameters for all components
+<<<<<<< HEAD
         of the simulation that can change without triggering a JAX recompilation.
+=======
+        of the simulation that can change without triggering a JAX
+        recompilation.
+>>>>>>> upstream/main
       geo: Geometry of the torus.
       core_profiles: Core plasma profiles.
       pedestal_model_output: Output of the pedestal model.
@@ -102,10 +111,7 @@ class CriticalGradientTransportModel(transport_model.TransportModel):
 
     # set critical gradient
     rlti_crit = (
-        4.0
-        / 3.0
-        * (1.0 + T_i_face / T_e_face)
-        * (1.0 + 2.0 * jnp.abs(s) / q)
+        4.0 / 3.0 * (1.0 + T_i_face / T_e_face) * (1.0 + 2.0 * jnp.abs(s) / q)
     )
 
     # gyrobohm diffusivity

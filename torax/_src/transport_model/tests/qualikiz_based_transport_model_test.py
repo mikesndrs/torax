@@ -175,7 +175,10 @@ class FakeQualikizBasedTransportModel(
     )
 
     qualikiz_inputs = self._prepare_qualikiz_inputs(
+<<<<<<< HEAD
         Z_eff_face=dynamic_runtime_params_slice.plasma_composition.Z_eff_face,
+=======
+>>>>>>> upstream/main
         transport=transport_runtime_params,
         geo=geo,
         core_profiles=core_profiles,

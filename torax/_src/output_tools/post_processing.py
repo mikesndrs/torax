@@ -16,7 +16,6 @@
 import dataclasses
 from typing import Callable
 
-import chex
 import jax
 from jax import numpy as jnp
 import numpy as np

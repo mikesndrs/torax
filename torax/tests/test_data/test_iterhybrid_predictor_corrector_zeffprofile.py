@@ -15,7 +15,10 @@
 """Identical to test_iterhybrid_predictor_corrector but with Z_eff profile."""
 import copy
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/main
 import numpy as np
 from torax.tests.test_data import test_iterhybrid_predictor_corrector
 

@@ -13,8 +13,9 @@
 # limitations under the License.
 
 """Shared setup code for unit tests using reference values."""
+import dataclasses
 
-import chex
+import jax
 from jax import numpy as jnp
 import numpy as np
 from torax._src import fvm

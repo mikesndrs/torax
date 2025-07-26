@@ -30,10 +30,16 @@ from torax._src import jax_utils
 # pylint: disable=g-import-not-at-top
 if TYPE_CHECKING:
   from jax.numpy import *
+<<<<<<< HEAD
 
   # pylint: enable=wildcard-import
   # pylint: enable=g-bad-import-order
   # pylint: enable=g-import-not-at-top
+=======
+# pylint: enable=wildcard-import
+# pylint: enable=g-bad-import-order
+# pylint: enable=g-import-not-at-top
+>>>>>>> upstream/main
 
 
 T = TypeVar('T')

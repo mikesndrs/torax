@@ -13,8 +13,9 @@
 # limitations under the License.
 
 """Dynamic runtime params for sawtooth model."""
+import dataclasses
 
-import chex
+import jax
 from torax._src import array_typing
 
 

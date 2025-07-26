@@ -21,11 +21,19 @@ CHEASE, FBT, etc.
 from collections.abc import Mapping
 import dataclasses
 import logging
+<<<<<<< HEAD
 from typing import Any, Optional
 
 import chex
 import contourpy
 from imas.ids_toplevel import IDSToplevel
+=======
+
+import chex
+import contourpy
+from imas import ids_toplevel
+import jax
+>>>>>>> upstream/main
 import numpy as np
 import scipy
 from torax._src import constants
@@ -33,8 +41,13 @@ from torax._src import interpolated_param
 from torax._src.geometry import geometry
 from torax._src.geometry import geometry_loader
 from torax._src.geometry import geometry_provider
+<<<<<<< HEAD
 from torax._src.torax_pydantic import torax_pydantic
 from torax.imas_tools import equilibrium as imas_equilibrium
+=======
+from torax._src.geometry import imas as imas_geometry
+from torax._src.torax_pydantic import torax_pydantic
+>>>>>>> upstream/main
 import typing_extensions
 
 # pylint: disable=invalid-name
@@ -942,13 +955,20 @@ class StandardGeometryIntermediates:
       Ip_from_parameters: bool,
       n_rho: int,
       hires_factor: int,
+<<<<<<< HEAD
       equilibrium_object: Optional[IDSToplevel] = None,
       imas_uri: Optional[str] = None,
       imas_filepath: Optional[str] = None,
+=======
+      equilibrium_object: ids_toplevel.IDSToplevel | None = None,
+      imas_uri: str | None = None,
+      imas_filepath: str | None = None,
+>>>>>>> upstream/main
   ) -> typing_extensions.Self:
     """Constructs a StandardGeometryIntermediates from a IMAS equilibrium IDS.
 
     Args:
+<<<<<<< HEAD
       geometry_directory: Directory where to find the scenario file ontaining the parameters of the Data entry to read.
         If None, then it defaults to another dir. See implementation.
       Ip_from_parameters: If True, the Ip is taken from the parameters and the
@@ -959,16 +979,33 @@ class StandardGeometryIntermediates:
       equilibrium_object: The equilibrium IDS containing the relevant data.
       imas_uri: The IMAS uri containing the equilibrium data.
       imas_filepath: The path to the IMAS netCDF file containing the equilibrium data.
+=======
+      geometry_directory: Directory where to find the scenario file ontaining
+        the parameters of the Data entry to read. If None, then it defaults to
+        another dir. See implementation.
+      Ip_from_parameters: If True, the Ip is taken from the parameters and the
+        values in the Geometry are rescaled to match the new Ip.
+      n_rho: Radial grid points (num cells).
+      hires_factor: High resolution factor for calculations.
+      equilibrium_object: The equilibrium IDS containing the relevant data.
+      imas_uri: The IMAS uri containing the equilibrium data.
+      imas_filepath: The path to the IMAS netCDF file containing the equilibrium
+        data.
+>>>>>>> upstream/main
 
     Returns:
       A StandardGeometry instance based on the input file. This can then be
       used to build a StandardGeometry by passing to `build_standard_geometry`.
     """
-    inputs = imas_equilibrium.geometry_from_IMAS(
+    inputs = imas_geometry.geometry_from_IMAS(
+        geometry_directory=geometry_directory,
         equilibrium_object=equilibrium_object,
         imas_uri=imas_uri,
         imas_filepath=imas_filepath,
+<<<<<<< HEAD
         geometry_directory=geometry_directory,
+=======
+>>>>>>> upstream/main
         Ip_from_parameters=Ip_from_parameters,
         n_rho=n_rho,
         hires_factor=hires_factor,

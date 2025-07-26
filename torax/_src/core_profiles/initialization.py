@@ -29,6 +29,7 @@ from torax._src.core_profiles import getters
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry
 from torax._src.geometry import standard_geometry
+from torax._src.neoclassical import neoclassical_models as neoclassical_models_lib
 from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
 from torax._src.physics import psi_calculations
 from torax._src.sources import source_models as source_models_lib

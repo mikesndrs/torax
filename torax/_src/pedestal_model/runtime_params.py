@@ -13,7 +13,9 @@
 # limitations under the License.
 
 """Dataclass representing runtime parameter inputs to the pedestal models."""
-import chex
+import dataclasses
+
+import jax
 from torax._src import array_typing
 
 

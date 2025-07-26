@@ -34,7 +34,10 @@ from torax._src.geometry import geometry
 class IntegralPreservationQuantity(enum.Enum):
   """The quantity to preserve the integral of when converting to face values."""
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/main
   # Indicate that the volume integral should be preserved.
   VOLUME = 'volume'
   # Indicate that the surface integral should be preserved.
@@ -45,9 +48,13 @@ class IntegralPreservationQuantity(enum.Enum):
 
 @functools.partial(
     jax_utils.jit,
+<<<<<<< HEAD
     static_argnames=[
         'preserved_quantity',
     ],
+=======
+    static_argnames=['preserved_quantity'],
+>>>>>>> upstream/main
 )
 def cell_to_face(
     cell_values: jt.Float[chex.Array, 'rhon'],
@@ -214,7 +221,11 @@ def cell_integration(
   """
   if x.shape != geo.rho_norm.shape:
     raise ValueError(
+<<<<<<< HEAD
         "For cell_integration, input 'x' must have same shape as the cell grid"
+=======
+        'For cell_integration, input "x" must have same shape as the cell grid'
+>>>>>>> upstream/main
         f'Got x.shape={x.shape}, expected {geo.rho_norm.shape}.'
     )
   return jnp.sum(x * geo.drho_norm)

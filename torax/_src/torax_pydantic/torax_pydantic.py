@@ -17,7 +17,10 @@
 import functools
 from typing import TypeAlias
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/main
 import pydantic
 from torax._src.torax_pydantic import interpolated_param_1d
 from torax._src.torax_pydantic import interpolated_param_2d

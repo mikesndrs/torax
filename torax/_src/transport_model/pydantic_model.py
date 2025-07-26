@@ -39,9 +39,7 @@ def _resolve_qlknn_model_name(model_name: str, model_path: str) -> str:
   if model_name:
     if model_name == qlknn_10d.QLKNN10D_NAME:
       if not model_path:
-        raise ValueError(
-            'QLKNN10D requires a model path to be provided.'
-        )
+        raise ValueError('QLKNN10D requires a model path to be provided.')
       if model_path.endswith('.qlknn'):
         raise ValueError(
             f'Model path "{model_path}" is not a valid path for a'
@@ -105,6 +103,7 @@ class QLKNNTransportModel(pydantic_model_base.TransportBase):
     An_min: Minimum |R/Lne| below which effective V is used instead of effective
       D.
   """
+
   model_name: Literal['qlknn'] = 'qlknn'
   model_path: str = ''
   qlknn_model_name: str = ''
@@ -280,6 +279,7 @@ class BohmGyroBohmTransportModel(pydantic_model_base.TransportBase):
     D_face_c2: Constant for the electron diffusivity weighting factor.
     V_face_coeff: Proportionality factor between convectivity and diffusivity.
   """
+
   model_name: Literal['bohm-gyrobohm'] = 'bohm-gyrobohm'
   chi_e_bohm_coeff: torax_pydantic.PositiveTimeVaryingScalar = (
       torax_pydantic.ValidatedDefault(8e-5)
@@ -341,10 +341,15 @@ class BohmGyroBohmTransportModel(pydantic_model_base.TransportBase):
 
 
 try:
+<<<<<<< HEAD
   # pylint: disable=g-import-not-at-top
   from torax._src.transport_model import qualikiz_transport_model
 
   # pylint: enable=g-import-not-at-top
+=======
+  from torax._src.transport_model import qualikiz_transport_model  # pylint: disable=g-import-not-at-top
+
+>>>>>>> upstream/main
   # Since CombinedCompatibleTransportModel is not constant, because of the
   # try/except block, unions using this type will cause invalid-annotation
   # errors in pytype.
@@ -371,6 +376,7 @@ class CombinedTransportModel(pydantic_model_base.TransportBase):
   Attributes:
     model_name: The transport model to use. Hardcoded to 'combined'.
     transport_models: A sequence of transport models, whose outputs will be
+<<<<<<< HEAD
       summed to give the combined transport coefficients.
   """
 
@@ -385,22 +391,68 @@ class CombinedTransportModel(pydantic_model_base.TransportBase):
         model.build_transport_model() for model in self.transport_models
     ]
     return combined.CombinedTransportModel(transport_models=model_list)
+=======
+      summed to give the combined core transport coefficients.
+    pedestal_transport_models: A sequence of models that will be combined for
+      pedestal transport coefficients.
+  """
+
+  # TODO(b/434175938) V2: rename `transport_models` to `core_transport_models`
+  transport_models: Sequence[CombinedCompatibleTransportModel] = pydantic.Field(
+      default_factory=list
+  )  # pytype: disable=invalid-annotation
+  pedestal_transport_models: Sequence[
+      CombinedCompatibleTransportModel
+  ] = pydantic.Field(
+      default_factory=list
+  )  # pytype: disable=invalid-annotation
+  model_name: Literal['combined'] = 'combined'
+
+  def build_transport_model(self) -> combined.CombinedTransportModel:
+    transport_models = [
+        model.build_transport_model() for model in self.transport_models
+    ]
+    pedestal_transport_models = [
+        model.build_transport_model()
+        for model in self.pedestal_transport_models
+    ]
+
+    return combined.CombinedTransportModel(
+        transport_models=transport_models,
+        pedestal_transport_models=pedestal_transport_models,
+    )
+>>>>>>> upstream/main
 
   def build_dynamic_params(
       self, t: chex.Numeric
   ) -> combined.DynamicRuntimeParams:
     base_kwargs = dataclasses.asdict(super().build_dynamic_params(t))
+<<<<<<< HEAD
     model_params_list = [
         model.build_dynamic_params(t) for model in self.transport_models
     ]
     return combined.DynamicRuntimeParams(
         transport_model_params=model_params_list,
+=======
+    transport_model_params = [
+        model.build_dynamic_params(t) for model in self.transport_models
+    ]
+    pedestal_transport_model_params = [
+        model.build_dynamic_params(t)
+        for model in self.pedestal_transport_models
+    ]
+
+    return combined.DynamicRuntimeParams(
+        transport_model_params=transport_model_params,
+        pedestal_transport_model_params=pedestal_transport_model_params,
+>>>>>>> upstream/main
         **base_kwargs,
     )
 
   @pydantic.model_validator(mode='after')
   def _check_fields(self) -> typing_extensions.Self:
     super()._check_fields()
+<<<<<<< HEAD
     if any([
         np.any(model.apply_inner_patch.value)
         or np.any(model.apply_outer_patch.value)
@@ -410,12 +462,38 @@ class CombinedTransportModel(pydantic_model_base.TransportBase):
           'apply_inner_patch and apply_outer_patch and should be set in the'
           ' config for CombinedTransportModel only, rather than its component'
           ' models.'
+=======
+    if (
+        any([
+            np.any(model.apply_inner_patch.value)
+            or np.any(model.apply_outer_patch.value)
+            for model in self.transport_models + self.pedestal_transport_models
+        ])
+        or np.any(self.apply_inner_patch.value)
+        or np.any(self.apply_outer_patch.value)
+    ):
+      raise ValueError(
+          'apply_inner_patch and apply_outer_patch not supported for'
+          ' CombinedTransportModel or its component models.'
+>>>>>>> upstream/main
       )
     if np.any(self.rho_min.value != 0.0) or np.any(self.rho_max.value != 1.0):
       raise ValueError(
           'rho_min and rho_max should not be set for CombinedTransportModel, as'
           ' it should be applied across the whole rho domain.'
       )
+<<<<<<< HEAD
+=======
+    if any([
+        np.any(model.rho_min.value != 0.0) or np.any(model.rho_max.value != 1.0)
+        for model in self.pedestal_transport_models
+    ]):
+      raise ValueError(
+          'rho_min and rho_max not supported for pedestal_transport_models, as '
+          'their region of validity is set by the pedestal model.'
+      )
+
+>>>>>>> upstream/main
     return self
 
 

@@ -31,6 +31,61 @@ from torax._src.config import runtime_params_slice
 from torax._src.geometry import geometry
 from torax._src.pedestal_model import pedestal_model as pedestal_model_lib
 from torax._src.transport_model import runtime_params as transport_runtime_params_lib
+<<<<<<< HEAD
+=======
+import typing_extensions
+
+
+@jax.tree_util.register_dataclass
+@dataclasses.dataclass
+class TurbulentTransport:
+  """Turbulent transport coefficients calculated by a transport model.
+
+  Attributes:
+    chi_face_ion: Ion heat conductivity, on the face grid.
+    chi_face_el: Electron heat conductivity, on the face grid.
+    d_face_el: Diffusivity of electron density, on the face grid.
+    v_face_el: Convection strength of electron density, on the face grid.
+    chi_face_el_bohm: (Optional) Bohm contribution for electron heat
+      conductivity.
+    chi_face_el_gyrobohm: (Optional) GyroBohm contribution for electron heat
+      conductivity.
+    chi_face_ion_bohm: (Optional) Bohm contribution for ion heat conductivity.
+    chi_face_ion_gyrobohm: (Optional) GyroBohm contribution for ion heat
+      conductivity.
+  """
+
+  chi_face_ion: jax.Array
+  chi_face_el: jax.Array
+  d_face_el: jax.Array
+  v_face_el: jax.Array
+  chi_face_el_bohm: Optional[jax.Array] = None
+  chi_face_el_gyrobohm: Optional[jax.Array] = None
+  chi_face_ion_bohm: Optional[jax.Array] = None
+  chi_face_ion_gyrobohm: Optional[jax.Array] = None
+
+  def __post_init__(self):
+    # Use the array size of chi_face_el as a reference.
+    if self.chi_face_el_bohm is None:
+      self.chi_face_el_bohm = jnp.zeros_like(self.chi_face_el)
+    if self.chi_face_el_gyrobohm is None:
+      self.chi_face_el_gyrobohm = jnp.zeros_like(self.chi_face_el)
+    if self.chi_face_ion_bohm is None:
+      self.chi_face_ion_bohm = jnp.zeros_like(self.chi_face_el)
+    if self.chi_face_ion_gyrobohm is None:
+      self.chi_face_ion_gyrobohm = jnp.zeros_like(self.chi_face_el)
+
+  @classmethod
+  def zeros(cls, geo: geometry.Geometry) -> typing_extensions.Self:
+    """Returns a CoreTransport with all zeros. Useful for initializing."""
+    shape = geo.rho_face.shape
+    return cls(
+        chi_face_ion=jnp.zeros(shape),
+        chi_face_el=jnp.zeros(shape),
+        d_face_el=jnp.zeros(shape),
+        v_face_el=jnp.zeros(shape),
+    )
+>>>>>>> upstream/main
 
 
 class TransportModel(abc.ABC):
@@ -83,6 +138,7 @@ class TransportModel(abc.ABC):
     # Restrict the model to operating in its permissible rho domain
     transport_coeffs = self._apply_domain_restriction(
         transport_runtime_params,
+<<<<<<< HEAD
         geo,
         transport_coeffs,
         pedestal_model_output,
@@ -93,6 +149,17 @@ class TransportModel(abc.ABC):
         transport_runtime_params,
         geo,
         transport_coeffs,
+=======
+        geo,
+        transport_coeffs,
+        pedestal_model_output,
+    )
+
+    # Apply min/max clipping
+    transport_coeffs = self._apply_clipping(
+        transport_runtime_params,
+        transport_coeffs,
+>>>>>>> upstream/main
     )
 
     # Apply inner and outer transport patch
@@ -149,7 +216,11 @@ class TransportModel(abc.ABC):
   ) -> TurbulentTransport:
     """Sets transport coefficients to zero outside the model's domain."""
     # Standard case: active range is
+<<<<<<< HEAD
     # rho_min <= rho <= rho_norm_ped_top
+=======
+    # rho_min < rho <= rho_norm_ped_top
+>>>>>>> upstream/main
     active_mask = (
         (geo.rho_face_norm > transport_runtime_params.rho_min)
         & (geo.rho_face_norm <= transport_runtime_params.rho_max)
@@ -346,11 +417,17 @@ class TransportModel(abc.ABC):
           lambda: jnp.dot(smoothing_matrix, coeff),
       )
 
+<<<<<<< HEAD
     return jax.tree_util.tree_map(
         smooth_single_coeff, transport_coeffs
     )
 
 
+=======
+    return jax.tree_util.tree_map(smooth_single_coeff, transport_coeffs)
+
+
+>>>>>>> upstream/main
 def _build_smoothing_matrix(
     transport_dynamic_runtime_params: transport_runtime_params_lib.DynamicRuntimeParams,
     dynamic_runtime_params_slice: runtime_params_slice.DynamicRuntimeParamsSlice,
@@ -362,11 +439,18 @@ def _build_smoothing_matrix(
   Uses a Gaussian kernel of HWHM defined in the transport config.
 
   Args:
-    geo: Geometry of the torus.
     transport_dynamic_runtime_params:  Input runtime parameters of this model
       that can change without triggering a JAX recompilation.
     dynamic_runtime_params_slice: Input runtime parameters of the simulation
       that can change without triggering a JAX recompilation.
+    geo: Geometry of the torus.
+<<<<<<< HEAD
+    transport_dynamic_runtime_params:  Input runtime parameters of this model
+      that can change without triggering a JAX recompilation.
+    dynamic_runtime_params_slice: Input runtime parameters of the simulation
+      that can change without triggering a JAX recompilation.
+=======
+>>>>>>> upstream/main
     pedestal_model_output: Output of the pedestal model.
 
   Returns:

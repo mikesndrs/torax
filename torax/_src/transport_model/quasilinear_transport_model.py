@@ -22,7 +22,7 @@ from torax._src import state
 from torax._src.fvm import cell_variable
 from torax._src.geometry import geometry
 from torax._src.transport_model import runtime_params as runtime_params_lib
-from torax._src.transport_model import transport_model
+from torax._src.transport_model import transport_model as transport_model_lib
 import typing_extensions
 
 

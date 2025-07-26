@@ -17,6 +17,10 @@
 import logging
 import os
 
+<<<<<<< HEAD
+=======
+# pylint: disable=g-importing-member
+>>>>>>> upstream/main
 import jax
 from torax._src import version
 from torax._src.config.config_loader import build_torax_config_from_file

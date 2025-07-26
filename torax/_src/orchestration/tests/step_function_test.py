@@ -18,10 +18,7 @@ from absl.testing import absltest
 import jax.numpy as jnp
 import numpy as np
 from torax._src import state
-from torax._src.fvm import cell_variable
-from torax._src.geometry import pydantic_model as geometry_pydantic_model
-from torax._src.neoclassical.bootstrap_current import base as bootstrap_current_base
-from torax._src.orchestration import sim_state
+from torax._src.orchestration import run_simulation
 from torax._src.orchestration import step_function
 from torax._src.test_utils import default_configs
 from torax._src.torax_pydantic import model_config
@@ -47,9 +44,31 @@ class StepFunctionTest(absltest.TestCase):
         self.dynamic_slice,
         self.sim_state,
         self.post_processed_outputs,
+<<<<<<< HEAD
+=======
     )
-    post_processed_outputs = post_processing.PostProcessedOutputs.zeros(geo)
+    self.assertEqual(error, state.SimError.NO_ERROR)
 
+  def test_nan_in_bc(self):
+    core_profiles = dataclasses.replace(
+        self.sim_state.core_profiles,
+        T_i=dataclasses.replace(
+            self.sim_state.core_profiles.T_i,
+            right_face_constraint=jnp.array(jnp.nan),
+        ),
+>>>>>>> upstream/main
+    )
+    new_sim_state_core_profiles = dataclasses.replace(
+        self.sim_state, core_profiles=core_profiles
+    )
+    error = step_function._check_for_errors(
+        self.dynamic_slice,
+        new_sim_state_core_profiles,
+        self.post_processed_outputs
+    )
+    self.assertEqual(error, state.SimError.NAN_DETECTED)
+
+<<<<<<< HEAD
     with self.subTest('no NaN'):
       error = torax_state.check_for_errors()
       self.assertEqual(error, state.SimError.NO_ERROR)
@@ -118,6 +137,50 @@ class StepFunctionTest(absltest.TestCase):
         ),
     )
 
+=======
+  def test_nan_in_post_processed_outputs(self):
+    new_post_processed_outputs = dataclasses.replace(
+        self.post_processed_outputs,
+        P_aux_total=jnp.array(jnp.nan),
+    )
+    error = step_function._check_for_errors(
+        self.dynamic_slice,
+        self.sim_state,
+        new_post_processed_outputs,
+    )
+    self.assertEqual(error, state.SimError.NAN_DETECTED)
+
+  def test_nan_in_source_array(self):
+    nan_array = np.zeros_like(self.sim_state.geometry.rho)
+    nan_array[-1] = np.nan
+    bootstrap_current = dataclasses.replace(
+        self.sim_state.core_sources.bootstrap_current,
+        j_bootstrap=nan_array,
+    )
+    new_core_sources = dataclasses.replace(
+        self.sim_state.core_sources, bootstrap_current=bootstrap_current
+    )
+    new_sim_state_sources = dataclasses.replace(
+        self.sim_state, core_sources=new_core_sources
+    )
+    error = step_function._check_for_errors(
+        self.dynamic_slice,
+        new_sim_state_sources,
+        self.post_processed_outputs,
+    )
+    self.assertEqual(error, state.SimError.NAN_DETECTED)
+
+  def test_below_min_dt(self):
+    dynamic_slice = dataclasses.replace(
+        self.dynamic_slice,
+        numerics=dataclasses.replace(
+            self.dynamic_slice.numerics,
+            min_dt=2.0,
+            dt_reduction_factor=2.0,
+        ),
+    )
+
+>>>>>>> upstream/main
     new_sim_state = dataclasses.replace(
         self.sim_state,
         dt=jnp.array(3.0),

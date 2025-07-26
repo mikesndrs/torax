@@ -20,10 +20,7 @@ See function docstring for details.
 import functools
 from typing import Callable, Final
 
-from absl import logging
-import jax
-from jax import numpy as jnp
-import numpy as np
+import chex
 from torax._src import jax_utils
 from torax._src import physics_models as physics_models_lib
 from torax._src import state as state_module

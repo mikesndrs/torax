@@ -19,6 +19,7 @@ import functools
 from typing import Literal
 
 import pydantic
+from torax._src import physics_models as physics_models_lib
 from torax._src.config import runtime_params_slice
 from torax._src.fvm import enums
 from torax._src.solver import linear_theta_method

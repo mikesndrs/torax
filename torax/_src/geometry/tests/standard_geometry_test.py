@@ -11,8 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+<<<<<<< HEAD
 
 import importlib
+=======
+import dataclasses
+>>>>>>> upstream/main
 import os
 
 from absl.testing import absltest
@@ -80,12 +84,20 @@ class GeometryTest(parameterized.TestCase):
     config = geometry_pydantic_model.EQDSKConfig(geometry_file=geometry_file)
     config.build_geometry()
 
+<<<<<<< HEAD
   @parameterized.parameters([
       dict(imas_filepath='ITERhybrid_COCOS17_IDS_ddv4.nc'),
   ])
   def test_build_standard_geometry_from_IMAS(self, imas_filepath):
     """Test that the default IMAS geometry can be built."""
     config = geometry_pydantic_model.IMASConfig(imas_filepath=imas_filepath)
+=======
+  def test_build_standard_geometry_from_IMAS(self):
+    """Test that the default IMAS geometry can be built."""
+    config = geometry_pydantic_model.IMASConfig(
+        imas_filepath='ITERhybrid_COCOS17_IDS_ddv4.nc'
+    )
+>>>>>>> upstream/main
     config.build_geometry()
 
   def test_access_z_magnetic_axis_raises_error_for_chease_geometry(self):

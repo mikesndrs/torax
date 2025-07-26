@@ -17,6 +17,7 @@ import abc
 import dataclasses
 
 import chex
+import jax
 from torax._src import state
 from torax._src.geometry import geometry as geometry_lib
 from torax._src.torax_pydantic import torax_pydantic

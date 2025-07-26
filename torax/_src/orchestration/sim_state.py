@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """Full simulator state to be used for orchestration."""
+import dataclasses
+
 from absl import logging
 import chex
 import jax

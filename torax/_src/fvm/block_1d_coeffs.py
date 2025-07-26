@@ -20,6 +20,7 @@ includes
 calculations specific to plasma physics to provide these coefficients.
 """
 
+import dataclasses
 from typing import Any, Optional, TypeAlias
 
 import jax

@@ -27,11 +27,18 @@ import copy
 
 import numpy as np
 from torax.tests.test_data import default_config
+<<<<<<< HEAD
 import jax.numpy as jnp
 
 x = jnp.linspace(0, 1, 10)
 chi_base_t1 = jnp.exp(-20 * x) + 0.3 * jnp.exp(-(((x - 0.7) / 0.3) ** 2))
 chi_base_t2 = jnp.exp(-20 * x) + 0.3 * jnp.exp(-(((x - 0.5) / 0.3) ** 2))
+=======
+
+x = np.linspace(0, 1, 10)
+chi_base_t1 = np.exp(-20 * x) + 0.3 * np.exp(-(((x - 0.7) / 0.3) ** 2))
+chi_base_t2 = np.exp(-20 * x) + 0.3 * np.exp(-(((x - 0.5) / 0.3) ** 2))
+>>>>>>> upstream/main
 
 CONFIG = copy.deepcopy(default_config.CONFIG)
 
@@ -40,6 +47,7 @@ CONFIG['transport'] = {
     # The name of this model will change in a future release
     'model_name': 'constant',
     'chi_i': (
+<<<<<<< HEAD
         jnp.array([0.0, 5.0]),
         x,
         1.5 * jnp.stack([chi_base_t1, chi_base_t2]),
@@ -48,6 +56,16 @@ CONFIG['transport'] = {
         jnp.array([0.0, 5.0]),
         x,
         jnp.stack([chi_base_t1, chi_base_t2]),
+=======
+        np.array([0.0, 5.0]),
+        x,
+        1.5 * np.stack([chi_base_t1, chi_base_t2]),
+    ),
+    'chi_e': (
+        np.array([0.0, 5.0]),
+        x,
+        np.stack([chi_base_t1, chi_base_t2]),
+>>>>>>> upstream/main
     ),
     'D_e': 1.0,
     'V_e': -0.33,
