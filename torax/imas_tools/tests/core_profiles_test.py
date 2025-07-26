@@ -12,37 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for torax.torax_imastools.equilibrium.py"""
+"""Unit tests for torax.torax_imastools.core_profiles.py"""
 
-import importlib
-import os
 from typing import Any, Optional
-import matplotlib.pyplot as plt
 import numpy as np
 from jax import numpy as jnp
 import pytest
 from absl.testing import absltest, parameterized
 
-from torax.geometry import pydantic_model as geometry_pydantic_model
+from torax._src.geometry import pydantic_model as geometry_pydantic_model
 
 try:
-    import imaspy
-    from imaspy.ids_toplevel import IDSToplevel
+    import imas
+    from imas.ids_toplevel import IDSToplevel
 except ImportError:
     IDSToplevel = Any
 import torax
 from torax import post_processing
-from torax.config import build_runtime_params
-from torax.orchestration.run_simulation import prep_simulation
+from torax._src.config import build_runtime_params
+from torax._src.orchestration.run_simulation import prep_simulation
 from torax.tests.test_lib import sim_test_case
-from torax.torax_imastools.util import load_IMAS_data, load_ids_from_Data_entry, update_dict
-from torax.torax_imastools.core_profiles import core_profiles_from_IMAS, core_profiles_to_IMAS
-from torax.torax_pydantic import model_config
-
-pytest.mark.skipif(
-    importlib.util.find_spec("imaspy") is None,
-    reason="IMASPy optional dependency"
-)
+from torax._src.geometry.imas import load_IMAS_data
+from torax.imas_tools.core_profiles import core_profiles_from_IMAS, core_profiles_to_IMAS, update_dict
+from torax._src.torax_pydantic import model_config
 
 class Core_profilesTest(sim_test_case.SimTestCase):
     """Integration Run with core_profiles from a reference run. To be integrated in sim_test_case probably."""
@@ -57,8 +49,6 @@ class Core_profilesTest(sim_test_case.SimTestCase):
         config_name,
     ):
         """Test that TORAX simulation example can be made with input core_profiles ids profiles, without raising error."""
-        if importlib.util.find_spec("imaspy") is None:
-            self.skipTest("IMASPy optional dependency")
 
         # Input core_profiles reading and config loading
         config = self._get_config_dict(config_name)
@@ -96,8 +86,6 @@ class Core_profilesTest(sim_test_case.SimTestCase):
         atol: Optional[float] = None,
     ):
       """Test to compare initialized profiles in TORAX with the initial core_profiles used to check consistency."""
-      if importlib.util.find_spec("imaspy") is None:
-          self.skipTest("IMASPy optional dependency")
 
       if rtol is None:
           rtol = self.rtol
@@ -161,8 +149,8 @@ class Core_profilesTest(sim_test_case.SimTestCase):
 
     @parameterized.parameters(
       [
-          dict(config_name="test_iterhybrid_rampup_short.py", ids_out = imaspy.IDSFactory().core_profiles()),
-          dict(config_name="test_iterhybrid_rampup_short.py", ids_out = imaspy.IDSFactory().plasma_profiles()),
+          dict(config_name="test_iterhybrid_rampup_short.py", ids_out = imas.IDSFactory().core_profiles()),
+          dict(config_name="test_iterhybrid_rampup_short.py", ids_out = imas.IDSFactory().plasma_profiles()),
       ]
     )
     def test_save_profiles_to_IMAS(
@@ -171,9 +159,6 @@ class Core_profilesTest(sim_test_case.SimTestCase):
         ids_out,
     ):
       """Test to check that data can be written in output to the IDS, either core_profiles or plasma_profiles."""
-      if importlib.util.find_spec("imaspy") is None:
-          self.skipTest("IMASPy optional dependency")
-
       # Input core_profiles reading and config loading
       config = self._get_config_dict(config_name)
       #Has to be replaced to load open access data
