@@ -60,11 +60,13 @@ def geometry_from_IMAS(
   elif imas_uri is not None:
     equilibrium = _load_imas_data(
         imas_uri,
+        'equilibrium',
         geometry_directory,
     )
   elif imas_filepath is not None:
     equilibrium = _load_imas_data(
         imas_filepath,
+        'equilibrium',
         geometry_directory,
     )
   else:
