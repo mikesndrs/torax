@@ -24,7 +24,10 @@ try:
 except ImportError:
     IDSToplevel = Any
 from torax._src.orchestration.sim_state import ToraxSimState
+from torax._src import constants
 from torax._src.output_tools import post_processing
+from torax._src.config import runtime_params_slice
+from torax._src.torax_pydantic import model_config
 from torax._src.geometry.geometry import face_to_cell
 
 def update_dict(old_dict:dict, updates:dict) -> dict:
@@ -54,7 +57,7 @@ def core_profiles_from_IMAS(
     ) -> dict:
     """Converts core_profiles IDS to a dict with the input profiles for the config.
     Args:
-    ids: IDS object. Can be either core_profiles or plasma_profiles.
+    ids: IDS object. Can be either core_profiles or plasma_profiles. The IDS can contain several time slices.
     read_psi_from_geo: Decides either to read psi from the geometry or from the input core/plasma_profiles IDS. Default value is True meaning that psi is taken from the geometry.
 
     Returns:
@@ -65,16 +68,13 @@ def core_profiles_from_IMAS(
     # numerics
     t_initial = float(profiles_1d[0].time)
 
-    #plasma_composition (should be set in the config as user defined free parameter)
-    #Zeff taken from here or set into config ?
+    #plasma_composition 
+    #Zeff taken from here or set into config before ?
     if len(ids.global_quantities.z_eff_resistive>0):
       Z_eff = {time_array[ti]: ids.global_quantities.z_eff_resistive[ti] for ti in range(len(time_array))}
     else:
       Z_eff = {time_array[ti]: {rhon_array[ti][rj]: profiles_1d[ti].zeff[rj] for rj in range(len(rhon_array[ti]))} for ti in range(len(time_array))}
-      # Zi_override = 1.0
-      # Ai_override = 2.5
-      # Zimp_override = 1.0
-      # Aimp_override = 1.0
+   
 
     #profile_conditions
     # Should we shift it to get psi=0 at the center ?
@@ -125,6 +125,8 @@ def core_profiles_from_IMAS(
 
 #TODO: Add option to save entire state history in one core_profiles output. 
 def core_profiles_to_IMAS(
+    config: model_config.ToraxConfig,  
+    dynamic_runtime_params_slice: runtime_params_slice.DynamicRuntimeParamsSlice, 
     post_processed_outputs: post_processing.PostProcessedOutputs,
     state: ToraxSimState,
     ids: IDSToplevel = imas.IDSFactory().core_profiles, 
@@ -132,6 +134,8 @@ def core_profiles_to_IMAS(
     """Converts torax core_profiles to IMAS IDS.
     Takes the cell grid as a basis and converts values on face grid to cell.
     Args:
+    config: TORAX config used for the simulation to get the names of the ions.
+    dynamic_runtime_params_slice: Used to get the ions fractions for the time slice used. 
     post_processed_outputs: TORAX post_processed_outputs with many useful data to output to the IDS.
     state: A ToraxSimState object.
     ids: Optional IDS object to be filled. Can be either core_profiles or plasma_profiles. Default is an empty core_profiles IDS. Note that both exists currently from Data Dictionary version 4, with plasma_profiles being the union of core_profiles and edge_profiles. 
@@ -142,7 +146,7 @@ def core_profiles_to_IMAS(
     cp_state = state.core_profiles
     cs_state = state.core_sources
     geometry = state.geometry
-    ids.ids_properties.comment = "IDS built from TORAX sim output. Grid based on torax cell grid, used cell grid values and interpolated face grid values"
+    ids.ids_properties.comment = "IDS built from TORAX sim output. Grid based on torax cell grid + boundaries."
     ids.ids_properties.homogeneous_time = 1
     ids.ids_properties.creation_date = datetime.date.today().isoformat()
     ids.time = [t]
@@ -159,15 +163,9 @@ def core_profiles_to_IMAS(
     ids.global_quantities.beta_tor_norm.resize(1)
     ids.global_quantities.t_e_volume_average.resize(1)
     ids.global_quantities.n_e_volume_average.resize(1)
-    ids.global_quantities.ion.resize(1) #Volume average Ti and ni only available for main ion (could be modified to define it for each of the main ions at least, and t_i_average for all ions, impurities included).
-    ids.global_quantities.ion[0].t_i_volume_average.resize(1)
-    ids.global_quantities.ion[0].n_i_volume_average.resize(1)
 
     ids.profiles_1d.resize(1)
     ids.profiles_1d[0].time = t
-    ids.profiles_1d[0].ion.resize(2)
-    ids.profiles_1d[0].ion[0].element.resize(1)
-    ids.profiles_1d[0].ion[1].element.resize(1)
 
     ids.vacuum_toroidal_field.r0 = geometry.R_major
     ids.vacuum_toroidal_field.b0[0] = geometry.B_0 # +1 or -1 ?
@@ -181,8 +179,7 @@ def core_profiles_to_IMAS(
     ids.global_quantities.beta_tor_norm[0] = post_processed_outputs.beta_N
     ids.global_quantities.t_e_volume_average[0] = post_processed_outputs.T_e_volume_avg * 1e3
     ids.global_quantities.n_e_volume_average[0] = post_processed_outputs.n_e_volume_avg 
-    ids.global_quantities.ion[0].t_i_volume_average[0] = post_processed_outputs.T_i_volume_avg * 1e3
-    ids.global_quantities.ion[0].n_i_volume_average[0] = post_processed_outputs.n_i_volume_avg
+    ids.global_quantities.ion_time_slice = t
   
     ids.profiles_1d[0].grid.rho_tor_norm = np.concatenate([[0.0], geometry.torax_mesh.cell_centers, [1.0]]) 
     Phi = np.concatenate([[geometry.Phi_face[0]],geometry.Phi, [geometry.Phi_face[-1]]])
@@ -204,30 +201,58 @@ def core_profiles_to_IMAS(
     ids.profiles_1d[0].pressure_thermal = post_processed_outputs.pressure_thermal_total.cell_plus_boundaries() 
     ids.profiles_1d[0].t_i_average = cp_state.T_i.cell_plus_boundaries() * 1e3
     ids.profiles_1d[0].n_i_total_over_n_e = (cp_state.n_i.cell_plus_boundaries() + cp_state.n_impurity.cell_plus_boundaries()) / cp_state.n_e.cell_plus_boundaries()
-    Z_i = np.concatenate([[cp_state.Z_i_face[0]], cp_state.Z_i, [cp_state.Z_i_face[-1]]])
-    Z_impurity = np.concatenate([[cp_state.Z_impurity_face[0]], cp_state.Z_impurity, [cp_state.Z_impurity_face[-1]]])
-    ids.profiles_1d[0].zeff = (Z_i**2 * cp_state.n_i.cell_plus_boundaries() + Z_impurity**2 * cp_state.n_impurity.cell_plus_boundaries()) / cp_state.n_e.cell_plus_boundaries() #Formula correct ?
+    Z_eff =  np.concatenate([[cp_state.Z_eff_face[0]], cp_state.Z_eff, [cp_state.Z_eff_face[-1]]])
+    ids.profiles_1d[0].zeff = Z_eff #Keep the formula below instead or keep zeff from cp as source of truth ? 
+    # Z_i = np.concatenate([[cp_state.Z_i_face[0]], cp_state.Z_i, [cp_state.Z_i_face[-1]]])
+    # Z_impurity = np.concatenate([[cp_state.Z_impurity_face[0]], cp_state.Z_impurity, [cp_state.Z_impurity_face[-1]]])
+    # ids.profiles_1d[0].zeff = (Z_i**2 * cp_state.n_i.cell_plus_boundaries() + Z_impurity**2 * cp_state.n_impurity.cell_plus_boundaries()) / cp_state.n_e.cell_plus_boundaries() #Formula correct ?
+    
+    main_ion = list(zip(config.plasma_composition.get_main_ion_names(), dynamic_runtime_params_slice.plasma_composition.main_ion.fractions))
+    impurities = list(zip(config.plasma_composition.get_impurity_names(), dynamic_runtime_params_slice.plasma_composition.impurity.fractions))
+    num_of_main_ions = len(main_ion)
+    num_ions = num_of_main_ions + len(impurities)
+    ids.profiles_1d[0].ion.resize(num_ions)
+    ids.global_quantities.ion.resize(num_ions) 
+    #Fill main ions quantities
+    for iion in range(len(main_ion)):
+      symbol, frac = main_ion[iion]
+      ion_properties = constants.ION_PROPERTIES_DICT[symbol]
+      #Should we read z_ion_1d from charge_states.get_average_charge_state().Z_per_species ?
+      # ids.profiles_1d[0].ion[iion].z_ion = np.mean(cp_state.Z_i)  # Change to make it correspond to volume average over plasma radius
+      # ids.profiles_1d[0].ion[iion].z_ion_1d = Z_i 
+      ids.profiles_1d[0].ion[iion].temperature = cp_state.T_i.cell_plus_boundaries() * 1e3
+      ids.profiles_1d[0].ion[iion].density = cp_state.n_i.cell_plus_boundaries() * frac 
+      ids.profiles_1d[0].ion[iion].density_thermal = cp_state.n_i.cell_plus_boundaries() * frac #Is it true that all ions are thermal ?
+      ids.profiles_1d[0].ion[iion].density_fast = np.zeros(len(ids.profiles_1d[0].grid.rho_tor_norm))
+      ids.profiles_1d[0].ion[iion].element.resize(1)
+      ids.profiles_1d[0].ion[iion].element[0].a = ion_properties.A
+      ids.profiles_1d[0].ion[iion].element[0].z_n = ion_properties.Z  
+      
+      ids.global_quantities.ion[iion].t_i_volume_average.resize(1)
+      ids.global_quantities.ion[iion].n_i_volume_average.resize(1)
+      ids.global_quantities.ion[iion].t_i_volume_average[0] = post_processed_outputs.T_i_volume_avg * 1e3
+      ids.global_quantities.ion[iion].n_i_volume_average[0] = post_processed_outputs.n_i_volume_avg * frac #Valid to do like this ? Volume average ni only available for main ion.
 
-    #TODO:add ion mixture details. Currently, only fill values for main ion and impurity averaged, do not take into account the mixture from config
-    ids.profiles_1d[0].ion[0].z_ion = np.mean(cp_state.Z_i)  # Change to make it correspond to volume average over plasma radius
-    ids.profiles_1d[0].ion[0].z_ion_1d = Z_i 
-    ids.profiles_1d[0].ion[0].temperature = cp_state.T_i.cell_plus_boundaries() * 1e3
-    ids.profiles_1d[0].ion[0].density = cp_state.n_i.cell_plus_boundaries() 
-    ids.profiles_1d[0].ion[0].density_thermal = cp_state.n_i.cell_plus_boundaries()
-    ids.profiles_1d[0].ion[0].density_fast = np.zeros(len(ids.profiles_1d[0].grid.rho_tor_norm))
-    # assume no molecules, revisit later
-    ids.profiles_1d[0].ion[0].element[0].a = cp_state.A_i
-    ids.profiles_1d[0].ion[0].element[0].z_n = np.round(np.mean(cp_state.Z_i)) # This or read the data from IonMixture ?
+    #Fill impurity quantities
+    #TODO: Include the impurity_mode from PR #1408 for the fractions calculations etc and impurity fractions stacked into core_profiles. 
+    for iion in range(len(impurities)):
+      symbol, frac = impurities[iion]
+      ion_properties = constants.ION_PROPERTIES_DICT[symbol]
+      #Should we read z_ion_1d from charge_states.get_average_charge_state().Z_per_species ?
+      # ids.profiles_1d[0].ion[num_of_main_ions+iion].z_ion = np.mean(cp_state.Z_impurity_face) # Change to make it correspond to volume average over plasma radius
+      # ids.profiles_1d[0].ion[num_of_main_ions+iion].z_ion_1d = Z_impurity
+      ids.profiles_1d[0].ion[num_of_main_ions+iion].temperature = cp_state.T_i.cell_plus_boundaries()
+      ids.profiles_1d[0].ion[num_of_main_ions+iion].density = cp_state.n_impurity.cell_plus_boundaries() * frac
+      ids.profiles_1d[0].ion[num_of_main_ions+iion].density_thermal = cp_state.n_impurity.cell_plus_boundaries() * frac
+      ids.profiles_1d[0].ion[num_of_main_ions+iion].density_fast = np.zeros(len(ids.profiles_1d[0].grid.rho_tor_norm))
+      ids.profiles_1d[0].ion[num_of_main_ions+iion].element.resize(1)
+      ids.profiles_1d[0].ion[num_of_main_ions+iion].element[0].a = ion_properties.A
+      ids.profiles_1d[0].ion[num_of_main_ions+iion].element[0].z_n = ion_properties.Z  
 
-    ids.profiles_1d[0].ion[1].z_ion = np.mean(cp_state.Z_impurity_face) # Change to make it correspond to volume average over plasma radius
-    ids.profiles_1d[0].ion[1].z_ion_1d = Z_impurity
-    ids.profiles_1d[0].ion[1].temperature = cp_state.T_i.cell_plus_boundaries()
-    ids.profiles_1d[0].ion[1].density = cp_state.n_impurity.cell_plus_boundaries()
-    ids.profiles_1d[0].ion[1].density_thermal = cp_state.n_impurity.cell_plus_boundaries()
-    ids.profiles_1d[0].ion[1].density_fast = np.zeros(len(ids.profiles_1d[0].grid.rho_tor_norm))
-    # assume no molecules, revisit later
-    ids.profiles_1d[0].ion[1].element[0].a = cp_state.A_impurity
-    ids.profiles_1d[0].ion[1].element[0].z_n = np.round(np.mean(cp_state.Z_impurity_face)) # This or read the data from IonMixture ?
+      ids.global_quantities.ion[num_of_main_ions+iion].t_i_volume_average.resize(1)
+      ids.global_quantities.ion[num_of_main_ions+iion].t_i_volume_average[0] = post_processed_outputs.T_i_volume_avg * 1e3 #Volume average Ti and ni only available for main ion.
+
+    
     q_cell = face_to_cell(cp_state.q_face)
     s_cell = face_to_cell(cp_state.s_face)
     ids.profiles_1d[0].q = np.concatenate([[cp_state.q_face[0]], q_cell, [cp_state.q_face[-1]]]) 
@@ -237,7 +262,7 @@ def core_profiles_to_IMAS(
     ids.profiles_1d[0].j_total = -1 * j_total 
     ids.profiles_1d[0].j_ohmic = -1 * post_processed_outputs.j_ohmic #TODO: Extend grid with boundaries : Need to find a way for these 2 as there is only values on cell grid for external current sources
     ids.profiles_1d[0].j_non_inductive = -1 *(sum(cs_state.psi.values()) + cs_state.bootstrap_current.j_bootstrap) # Extend grid with boundaries 
-    ids.profiles_1d[0].j_bootstrap = j_bootstrap
+    ids.profiles_1d[0].j_bootstrap = -1 * j_bootstrap
     sigma = np.concatenate([[cp_state.sigma_face[0]], cp_state.sigma, [cp_state.sigma_face[-1]]]) 
     ids.profiles_1d[0].conductivity_parallel = sigma
     return ids
