@@ -94,12 +94,9 @@ class Core_profilesTest(sim_test_case.SimTestCase):
           atol = self.atol
       # Input core_profiles reading and config loading
       config = self._get_config_dict(config_name)
-      #Has to be replaced to load open access data
-      # path = '/home/ITER/belloum/git/torax_dir/torax/torax/data/third_party/geo/scenario.yaml' #Specify path to load core_profiles -> should we generate example core_profiles ?
-      # path = 'torax/data/third_party/geo/core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
-      path = 'core_profiles_15MA_DT_50_50_flat_top_slice.nc' #Using another input core_profiles with more radial resolution.
+      # path = 'core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
+      path = 'core_profiles_15MA_DT_50_50_flat_top_slice.nc' #Using this as input instead of rampup_conditions because it has more radial resolution.
       core_profiles_in = _load_imas_data(path, "core_profiles")
-      # core_profiles_in = load_ids_from_Data_entry(path, "core_profiles")
       rhon_in = core_profiles_in.profiles_1d[0].grid.rho_tor_norm
 
       # Modifying the input config profiles_conditions class
@@ -197,7 +194,8 @@ class Core_profilesTest(sim_test_case.SimTestCase):
           )
       post_processed_outputs = post_processed_outputs_history[-1]
       final_sim_state = state_history[-1]
-      core_profiles_to_IMAS(post_processed_outputs, final_sim_state, ids_out)
+      t_final = final_sim_state.t 
+      core_profiles_to_IMAS(torax_config, dynamic_runtime_params_slice_provider(t_final), post_processed_outputs, final_sim_state, ids_out)
 
 
 
