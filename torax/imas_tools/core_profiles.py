@@ -75,7 +75,7 @@ def core_profiles_from_IMAS(
     #profile_conditions
     # Should we shift it to get psi=0 at the center ?
     if not read_psi_from_geo:
-      psi = {t_initial: {rhon_array[0][rj]: 1 * (profiles_1d[0].grid.psi[rj]) for rj in range(len(rhon_array[0]))}} #To discuss either we provide it here or init it from geo
+      psi = {t_initial: {rhon_array[0][rj]: (profiles_1d[0].grid.psi[rj]) for rj in range(len(rhon_array[0]))}} #To discuss either we provide it here or init it from geo
     else:
        psi = None
     #Will be overwritten anyway if Ip_from_parameters = False, when Ip is given from the equilibrium (in most cases probably).
@@ -95,6 +95,11 @@ def core_profiles_from_IMAS(
     n_e = {time_array[ti]: {rhon_array[ti][ri]: profiles_1d[ti].electrons.density[ri] for ri in range(len(rhon_array[ti]))} for ti in range(len(time_array))}
     # ne_bound_right = {time_array[ti]: profiles_1d[ti].electrons.density[-1]for ti in range(len(time_array))}
 
+    if len(ids.global_quantities.v_loop>0): #Map v_loop_lcfs in case it is used as bc for psi equation.
+       v_loop_lcfs = {time_array[ti]: ids.global_quantities.v_loop[ti]for ti in range(len(time_array))} #+ or -1 ?
+    else:
+       v_loop_lcfs = [0.0]
+
     return {"plasma_composition" :{
             "Z_eff": Z_eff,
         },
@@ -111,6 +116,7 @@ def core_profiles_from_IMAS(
             "nbar": None,
             "n_e" : n_e,
             "normalize_n_e_to_nbar": False,
+            "v_loop_lcfs": v_loop_lcfs,
         },
         "numerics": {
             "t_initial": t_initial,
