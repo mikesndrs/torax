@@ -337,6 +337,12 @@ def core_profiles_to_IMAS(
     # Should we read z_ion_1d from charge_states.get_average_charge_state().Z_per_species ?
     # ids.profiles_1d[0].ion[iion].z_ion = np.mean(cp_state.Z_i)  # Change to make it correspond to volume average over plasma radius
     # ids.profiles_1d[0].ion[iion].z_ion_1d = Z_i
+    if (
+        ids.metadata.name == "core_profiles"
+    ):  # Temporary if, will be removed in future versions where the path should be the same for both core and plasma_profiles.
+      ids.profiles_1d[0].ion[iion].name = symbol
+    else:
+      ids.profiles_1d[0].ion[iion].label = symbol
     ids.profiles_1d[0].ion[iion].temperature = (
         cp_state.T_i.cell_plus_boundaries() * 1e3
     )
@@ -348,6 +354,22 @@ def core_profiles_to_IMAS(
     )  # Is it true that all ions are thermal ?
     ids.profiles_1d[0].ion[iion].density_fast = np.zeros(
         len(ids.profiles_1d[0].grid.rho_tor_norm)
+    )
+    total_ions_mixture_fraction = (
+        frac
+        * cp_state.n_i.cell_plus_boundaries()
+        / (
+            cp_state.n_i.cell_plus_boundaries()
+            + cp_state.n_impurity.cell_plus_boundaries()
+        )
+    )  # Proportion of this ion among total ions species for pressure ratio computation.
+    ids.profiles_1d[0].ion[iion].pressure = (
+        total_ions_mixture_fraction
+        * post_processed_outputs.pressure_thermal_i.cell_plus_boundaries()
+    )
+    ids.profiles_1d[0].ion[iion].pressure_thermal = (
+        total_ions_mixture_fraction
+        * post_processed_outputs.pressure_thermal_i.cell_plus_boundaries()
     )
     ids.profiles_1d[0].ion[iion].element.resize(1)
     ids.profiles_1d[0].ion[iion].element[0].a = ion_properties.A
@@ -370,6 +392,12 @@ def core_profiles_to_IMAS(
     # Should we read z_ion_1d from charge_states.get_average_charge_state().Z_per_species ?
     # ids.profiles_1d[0].ion[num_of_main_ions+iion].z_ion = np.mean(cp_state.Z_impurity_face) # Change to make it correspond to volume average over plasma radius
     # ids.profiles_1d[0].ion[num_of_main_ions+iion].z_ion_1d = Z_impurity
+    if (
+        ids.metadata.name == "core_profiles"
+    ):  # Temporary if, will be removed in future versions where the path should be the same for both core and plasma_profiles.
+      ids.profiles_1d[0].ion[num_of_main_ions + iion].name = symbol
+    else:
+      ids.profiles_1d[0].ion[num_of_main_ions + iion].label = symbol
     ids.profiles_1d[0].ion[
         num_of_main_ions + iion
     ].temperature = cp_state.T_i.cell_plus_boundaries()
@@ -381,6 +409,22 @@ def core_profiles_to_IMAS(
     )
     ids.profiles_1d[0].ion[num_of_main_ions + iion].density_fast = np.zeros(
         len(ids.profiles_1d[0].grid.rho_tor_norm)
+    )
+    total_ions_mixture_fraction = (
+        frac
+        * cp_state.n_impurity.cell_plus_boundaries()
+        / (
+            cp_state.n_i.cell_plus_boundaries()
+            + cp_state.n_impurity.cell_plus_boundaries()
+        )
+    )  # Proportion of this ion among total ions species for pressure ratio computation.
+    ids.profiles_1d[0].ion[num_of_main_ions + iion].pressure = (
+        total_ions_mixture_fraction
+        * post_processed_outputs.pressure_thermal_i.cell_plus_boundaries()
+    )
+    ids.profiles_1d[0].ion[num_of_main_ions + iion].pressure_thermal = (
+        total_ions_mixture_fraction
+        * post_processed_outputs.pressure_thermal_i.cell_plus_boundaries()
     )
     ids.profiles_1d[0].ion[num_of_main_ions + iion].element.resize(1)
     ids.profiles_1d[0].ion[num_of_main_ions + iion].element[
