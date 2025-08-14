@@ -70,11 +70,7 @@ def core_profiles_from_IMAS(
 
     #plasma_composition 
     #Zeff taken from here or set into config before ?
-    if len(ids.global_quantities.z_eff_resistive>0):
-      Z_eff = {time_array[ti]: ids.global_quantities.z_eff_resistive[ti] for ti in range(len(time_array))}
-    else:
-      Z_eff = {time_array[ti]: {rhon_array[ti][rj]: profiles_1d[ti].zeff[rj] for rj in range(len(rhon_array[ti]))} for ti in range(len(time_array))}
-   
+    Z_eff = {time_array[ti]: {rhon_array[ti][rj]: profiles_1d[ti].zeff[rj] for rj in range(len(rhon_array[ti]))} for ti in range(len(time_array))}
 
     #profile_conditions
     # Should we shift it to get psi=0 at the center ?
@@ -83,7 +79,7 @@ def core_profiles_from_IMAS(
     else:
        psi = None
     #Will be overwritten anyway if Ip_from_parameters = False, when Ip is given from the equilibrium (in most cases probably).
-    Ip = {time_array[ti]: -1 * ids.global_quantities.ip[ti]for ti in range(len(time_array))} #Should come from geometry. Need to be mapped or not ?
+    Ip = {time_array[ti]: -1 * ids.global_quantities.ip[ti]for ti in range(len(time_array))}
 
     T_e = {time_array[ti]: {rhon_array[ti][rj]: profiles_1d[ti].electrons.temperature[rj]/1e3 for rj in range(len(rhon_array[ti]))} for ti in range(len(time_array))}
     #bound_right conditions commented: Will raise an error if rhon[-1]!= 1.
@@ -98,7 +94,6 @@ def core_profiles_from_IMAS(
 
     n_e = {time_array[ti]: {rhon_array[ti][ri]: profiles_1d[ti].electrons.density[ri] for ri in range(len(rhon_array[ti]))} for ti in range(len(time_array))}
     # ne_bound_right = {time_array[ti]: profiles_1d[ti].electrons.density[-1]for ti in range(len(time_array))}
-    # nbar =
 
     return {"plasma_composition" :{
             "Z_eff": Z_eff,
@@ -113,9 +108,9 @@ def core_profiles_from_IMAS(
             "n_e_right_bc_is_fGW": False,
             "n_e_right_bc": None,
             "n_e_nbar_is_fGW": False,
+            "nbar": None,
             "n_e" : n_e,
             "normalize_n_e_to_nbar": False,
-            "set_pedestal": True, #Should it be set ? Probably not
         },
         "numerics": {
             "t_initial": t_initial,

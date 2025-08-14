@@ -15,21 +15,14 @@
 """Unit tests for torax.torax_imastools.core_profiles.py"""
 
 from typing import Any, Optional
-import numpy as np
-from jax import numpy as jnp
-import pytest
 from absl.testing import absltest, parameterized
-
-from torax._src.geometry import pydantic_model as geometry_pydantic_model
+import numpy as np
 
 try:
     import imas
-    from imas.ids_toplevel import IDSToplevel
 except ImportError:
     IDSToplevel = Any
 import torax
-from torax._src.output_tools import post_processing
-from torax._src.config import build_runtime_params
 from torax._src.orchestration.run_simulation import prepare_simulation
 from torax._src.orchestration import run_loop
 from torax._src.test_utils import sim_test_case
@@ -40,29 +33,19 @@ from torax._src.torax_pydantic import model_config
 class Core_profilesTest(sim_test_case.SimTestCase):
     """Integration Run with core_profiles from a reference run. To be integrated in sim_test_case probably."""
 
-    @parameterized.parameters(
-        [
-            dict(config_name="test_iterhybrid_rampup_short.py",),
-        ]
-    )
     def test_run_with_core_profiles_to_IMAS(
         self,
-        config_name,
     ):
-        """Test that TORAX simulation example can be made with input core_profiles ids profiles, without raising error."""
+        """Test that TORAX simulation example can run with input core_profiles ids profiles, without raising error."""
 
         # Input core_profiles reading and config loading
-        config = self._get_config_dict(config_name)
+        config = self._get_config_dict("test_iterhybrid_rampup_short.py")
 
-        #Has to be replaced to load open access data
-        # path = '/home/ITER/belloum/git/torax_dir/torax/torax/data/third_party/geo/scenario.yaml' #Specify path to load core_profiles -> should we generate example core_profiles ?
         path = 'core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
         core_profiles_in = _load_imas_data(path, "core_profiles")
-        # core_profiles_in = load_ids_from_Data_entry(path, "core_profiles")
 
         # Modifying the input config profiles_conditions class
         core_profiles_conditions = core_profiles_from_IMAS(core_profiles_in, read_psi_from_geo=True)
-        # config.update_fields(core_profiles_conditions)
         config_with_IMAS_profiles = update_dict(config, core_profiles_conditions) #Is it better to do like this, or first convert to ToraxConfig and use config.config_args.recursive_replace or maybe another function that does the same instead ?
         # Or use ToraxConfig.update_fields ?
         torax_config = model_config.ToraxConfig.from_dict(config_with_IMAS_profiles)
@@ -101,10 +84,8 @@ class Core_profilesTest(sim_test_case.SimTestCase):
 
       # Modifying the input config profiles_conditions class
       core_profiles_conditions = core_profiles_from_IMAS(core_profiles_in, read_psi_from_geo= False)
-      # config.update_fields(core_profiles_conditions)
       config_with_IMAS_profiles = update_dict(config, core_profiles_conditions) #Is it better to do like this, or first convert to ToraxConfig and use config.config_args.recursive_replace or maybe another function that does the same instead ?
-      config_with_IMAS_profiles['geometry']['n_rho']=200 #len(rhon_in): With less resolution we loose some accuracy doing two interpolations
-      # Or use ToraxConfig.update_fields ?
+      config_with_IMAS_profiles['geometry']['n_rho']=200 #With less resolution we loose some accuracy doing two interpolations
       torax_config = model_config.ToraxConfig.from_dict(config_with_IMAS_profiles)
 
       #Init sim from config
@@ -112,7 +93,6 @@ class Core_profilesTest(sim_test_case.SimTestCase):
 
       #Read output values
       torax_mesh=torax_config.geometry.build_provider.torax_mesh
-      cell_centers = torax_mesh.cell_centers
       face_centers = torax_mesh.face_centers
       #Compare the initial core_profiles with the ids profiles
       init_core_profiles = sim_state.core_profiles
@@ -147,23 +127,19 @@ class Core_profilesTest(sim_test_case.SimTestCase):
 
     @parameterized.parameters(
       [
-          dict(config_name="test_iterhybrid_rampup_short.py", ids_out = imas.IDSFactory().core_profiles()),
-          dict(config_name="test_iterhybrid_rampup_short.py", ids_out = imas.IDSFactory().plasma_profiles()),
+          dict(ids_out = imas.IDSFactory().core_profiles()),
+          dict(ids_out = imas.IDSFactory().plasma_profiles()),
       ]
     )
     def test_save_profiles_to_IMAS(
         self,
-        config_name,
         ids_out,
     ):
       """Test to check that data can be written in output to the IDS, either core_profiles or plasma_profiles."""
       # Input core_profiles reading and config loading
-      config = self._get_config_dict(config_name)
-      #Has to be replaced to load open access data
-      # path = '/home/ITER/belloum/git/torax_dir/torax/torax/data/third_party/geo/scenario.yaml' #Specify path to load core_profiles -> should we generate example core_profiles ?
+      config = self._get_config_dict("test_iterhybrid_rampup_short.py")
       path = 'core_profiles_ddv4_iterhybrid_rampup_conditions.nc'
       core_profiles_in = _load_imas_data(path, "core_profiles")
-      # core_profiles_in = load_ids_from_Data_entry(path, "core_profiles")
 
       # Modifying the input config profiles_conditions class
       core_profiles_conditions = core_profiles_from_IMAS(core_profiles_in, read_psi_from_geo = False)
@@ -195,9 +171,9 @@ class Core_profilesTest(sim_test_case.SimTestCase):
       post_processed_outputs = post_processed_outputs_history[-1]
       final_sim_state = state_history[-1]
       t_final = final_sim_state.t 
-      core_profiles_to_IMAS(torax_config, dynamic_runtime_params_slice_provider(t_final), post_processed_outputs, final_sim_state, ids_out)
-
-
+      filled_ids = core_profiles_to_IMAS(torax_config, dynamic_runtime_params_slice_provider(t_final), post_processed_outputs, final_sim_state, ids_out)
+      #filled_ids.validate()  : can be done once we fix the grid dimension for j_ohmic and j_external.  
+      
 
 if __name__ == "__main__":
     absltest.main()
