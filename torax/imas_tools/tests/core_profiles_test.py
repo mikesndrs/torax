@@ -15,7 +15,9 @@
 """Unit tests for torax.torax_imastools.core_profiles.py"""
 
 from typing import Any, Optional
-from absl.testing import absltest, parameterized
+
+from absl.testing import absltest
+from absl.testing import parameterized
 import numpy as np
 
 try:
@@ -23,12 +25,15 @@ try:
 except ImportError:
     IDSToplevel = Any
 import torax
-from torax._src.orchestration.run_simulation import prepare_simulation
-from torax._src.orchestration import run_loop
-from torax._src.test_utils import sim_test_case
 from torax._src.geometry.imas import _load_imas_data
-from torax.imas_tools.core_profiles import core_profiles_from_IMAS, core_profiles_to_IMAS, update_dict
+from torax._src.orchestration import run_loop
+from torax._src.orchestration.run_simulation import prepare_simulation
+from torax._src.test_utils import sim_test_case
 from torax._src.torax_pydantic import model_config
+from torax.imas_tools.core_profiles import core_profiles_from_IMAS
+from torax.imas_tools.core_profiles import core_profiles_to_IMAS
+from torax.imas_tools.core_profiles import update_dict
+
 
 class Core_profilesTest(sim_test_case.SimTestCase):
     """Integration Run with core_profiles from a reference run. To be integrated in sim_test_case probably."""
