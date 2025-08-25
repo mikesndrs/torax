@@ -60,13 +60,13 @@ def geometry_from_IMAS(
   elif imas_uri is not None:
     equilibrium = _load_imas_data(
         imas_uri,
-        'equilibrium',
+        "equilibrium",
         geometry_directory,
     )
   elif imas_filepath is not None:
     equilibrium = _load_imas_data(
         imas_filepath,
-        'equilibrium',
+        "equilibrium",
         geometry_directory,
     )
   else:
@@ -179,9 +179,10 @@ def geometry_from_IMAS(
       "z_magnetic_axis": z_magnetic_axis,
   }
 
-#TODO: For future PR, if imas files get refactored, modify the function to be
-#more generic (change geometry_directory argument name for example, and point
-#to either data/third_party or data/hrid_party/imas_data by default).
+
+# TODO: For future PR, if imas files get refactored, modify the function to be
+# more generic (change geometry_directory argument name for example, and point
+# to either data/third_party or data/hrid_party/imas_data by default).
 def _load_imas_data(
     uri: str,
     ids_name: str,
