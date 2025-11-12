@@ -67,14 +67,24 @@ def profile_conditions_from_IMAS(
         [profile.t_i_average / 1e3 for profile in profiles_1d],
     )
   else:
-    t_i_average = [
-        np.average(
-            [ion.temperature / 1e3 for ion in profile.ion],
-            axis=0,
-            weights=[ion.density for ion in profile.ion],
-        )
-        for profile in profiles_1d
-    ]
+    if profiles_1d[0].ion[0].density:
+        t_i_average = [
+            np.average(
+                [ion.temperature / 1e3 for ion in profile.ion],
+                axis=0,
+                weights=[ion.density for ion in profile.ion],
+            )
+            for profile in profiles_1d
+        ]
+    else: #In case ion density is empty.
+        t_i_average = [
+            np.mean(
+                [ion.temperature / 1e3 for ion in profile.ion],
+                axis=0
+            )
+            for profile in profiles_1d
+        ]
+
     T_i = (
         time_array,
         rhon_array,
@@ -136,7 +146,7 @@ def plasma_composition_from_IMAS(
       initial time will be the time of the first time slice of the ids. Else all
       time slices will be shifted such that the first time slice has time =
       t_initial.
-    expected_impurities: Optional arg to check that the input IDS contains the
+    expected_impurities: Optional arg to check that the input IDS contains the 
       wanted impurity species and raise and error if not, or if its density is
       empty.
     main_ions_symbols: collection of ions to be used to define the main_ion
@@ -154,9 +164,33 @@ def plasma_composition_from_IMAS(
   # Check that the expected ions are present in the IDS
   ids_ions = [ion.name for ion in profiles_1d[0].ion if ion.density]
   if expected_impurities:
-    _check_expected_ions_presence(ids_ions, expected_impurities)
+    for impurity in expected_impurities:
+      if impurity not in constants.ION_PROPERTIES_DICT.keys():
+        raise (
+            KeyError(f"{impurity} is not a valid symbol of a TORAX valid ion.")
+        )
+      if impurity not in ids_ions:
+        raise (
+            ValueError(
+                f"The expected impurity {impurity} cannot be found in the input"
+                " IDS or has no valid data. \n Please check that the IDS is"
+                " properly filled"
+            )
+        )
   if main_ions_symbols is not constants.HYDROGENIC_IONS:
-    _check_expected_ions_presence(ids_ions, main_ions_symbols)
+    for main_ion in main_ions_symbols:
+      if main_ion not in constants.ION_PROPERTIES_DICT.keys():
+        raise (
+            KeyError(f"{main_ion} is not a valid symbol of a TORAX valid ion.")
+        )
+      if main_ion not in ids_ions:
+        raise (
+            ValueError(
+                f"The expected main ion {main_ion} cannot be found in the input"
+                " IDS or has no valid data. \n Please check that the IDS is"
+                " properly filled"
+            )
+        )
 
   Z_eff = (
       time_array,
@@ -216,21 +250,3 @@ def _get_time_and_radial_arrays(
     time_array = [ti - time_array[0] + t_initial for ti in time_array]
   rhon_array = [profile.grid.rho_tor_norm for profile in profiles_1d]
   return profiles_1d, rhon_array, time_array
-
-
-def _check_expected_ions_presence(
-    ids_ions: list[str],
-    expected_ions: Collection[str],
-) -> None:
-  """Checks that the expected_ions symbols are in the ids_ions array."""
-  for ion in expected_ions:
-    if ion not in constants.ION_PROPERTIES_DICT.keys():
-      raise (KeyError(f"{ion} is not a valid symbol of a TORAX valid ion."))
-    if ion not in ids_ions:
-      raise (
-          ValueError(
-              f"The expected ion {ion} cannot be found in the input"
-              " IDS or has no valid data. \n Please check that the IDS is"
-              " properly filled"
-          )
-      )
