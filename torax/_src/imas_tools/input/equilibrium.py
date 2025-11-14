@@ -33,6 +33,7 @@ def geometry_from_IMAS(
     equilibrium_object: ids_toplevel.IDSToplevel | None = None,
     imas_uri: str | None = None,
     imas_filepath: str | None = None,
+    explicit_convert: bool | None = None,
 ) -> dict[str, Any]:
   """Constructs a StandardGeometryIntermediates from a IMAS equilibrium IDS.
 
@@ -67,11 +68,17 @@ def geometry_from_IMAS(
     equilibrium = equilibrium_object
   elif imas_uri is not None:
     equilibrium = loader.load_imas_data(
-        imas_uri, "equilibrium", geometry_directory,
+        imas_uri,
+        "equilibrium",
+        geometry_directory,
+        explicit_convert,
     )
   elif imas_filepath is not None:
     equilibrium = loader.load_imas_data(
-        imas_filepath, "equilibrium", geometry_directory,
+        imas_filepath,
+        "equilibrium",
+        geometry_directory,
+        explicit_convert,
     )
   else:
     raise ValueError(
