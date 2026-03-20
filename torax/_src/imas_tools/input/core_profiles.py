@@ -77,14 +77,24 @@ def profile_conditions_from_IMAS(
         [profile.t_i_average / 1e3 for profile in profiles_1d],
     )
   else:
-    t_i_average = [
-        np.average(
-            [ion.temperature / 1e3 for ion in profile.ion],
-            axis=0,
-            weights=[ion.density for ion in profile.ion],
-        )
-        for profile in profiles_1d
-    ]
+    if profiles_1d[0].ion[0].density:
+        t_i_average = [
+            np.average(
+                [ion.temperature / 1e3 for ion in profile.ion],
+                axis=0,
+                weights=[ion.density for ion in profile.ion],
+            )
+            for profile in profiles_1d
+        ]
+    else: #In case ion density is empty.
+        t_i_average = [
+            np.mean(
+                [ion.temperature / 1e3 for ion in profile.ion],
+                axis=0
+            )
+            for profile in profiles_1d
+        ]
+
     T_i = (
         time_array,
         rhon_array,
