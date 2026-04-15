@@ -47,10 +47,17 @@ def profile_conditions_from_IMAS(
     )
 
   validation.validate_core_profiles_ids(ids)
-  profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
-      ids, t_initial
-  )
-
+  if ids.time:
+    profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
+        ids, t_initial, get_time=False
+    )
+    time_array = ids.time
+    if t_initial:
+      time_array = [t - time_array[0] + t_initial for t in time_array]
+  else:
+    profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
+        ids, t_initial
+    )
   # profile_conditions
   psi = (time_array, rhon_array, [profile.grid.psi for profile in profiles_1d])
   # TODO(b/335204606): Clean this up once we finalize our COCOS convention.
@@ -173,9 +180,18 @@ def plasma_composition_from_IMAS(
         "Expected core_profiles or plasma_profiles IDS, got"
         f" {ids.metadata.name} IDS."
     )
-  profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
-      ids, t_initial
-  )
+  if ids.time:
+    profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
+        ids, t_initial, get_time=False
+    )
+    time_array = ids.time
+    if t_initial:
+      time_array = [t - time_array[0] + t_initial for t in time_array]
+  else:
+    profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
+        ids, t_initial
+    )
+   
   # Check that the expected ions are present in the IDS
   ids_ions = [ion.name for ion in profiles_1d[0].ion if ion.density]
   if expected_impurities:

@@ -72,6 +72,7 @@ def load_imas_data(
 def get_time_and_radial_arrays(
     ids_node: ids_structure.IDSStructure,
     t_initial: float | None = None,
+    get_time: bool = True,
 ) -> tuple[ids_struct_array.IDSStructArray, list[list[float]], list[float]]:
   """Extracts time and radial arrays from a given IDS node.
 
@@ -93,8 +94,14 @@ def get_time_and_radial_arrays(
       - time_array: A list containing the time points.
   """
   profiles_1d = ids_node.profiles_1d
-  time_array = [profile.time for profile in profiles_1d]
-  if t_initial:
-    time_array = [t - time_array[0] + t_initial for t in time_array]
+  if get_time:
+    if profiles_1d[0].time is not None:
+      time_array = [profile.time for profile in profiles_1d]
+    else:
+      time_array = ids_node.time
+    if t_initial:
+      time_array = [t - time_array[0] + t_initial for t in time_array]
+  else:
+    time_array = None
   rhon_array = [profile.grid.rho_tor_norm for profile in profiles_1d]
   return profiles_1d, rhon_array, time_array

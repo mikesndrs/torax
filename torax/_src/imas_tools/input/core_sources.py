@@ -140,7 +140,12 @@ def sources_from_IMAS(
   # Checks that the IDS is of the correct type.
   if ids.metadata.name != "core_sources":
     raise ValueError(f"Expected core_sources IDS, got {ids.metadata.name} IDS.")
-
+  if ids.time is not None:
+    global_time_array = ids.time
+    if t_initial:
+      global_time_array = [t - global_time_array[0] + t_initial for t in global_time_array]
+  else:
+    global_time_array = None 
   accumulator = SourceCollection()
   for source in ids.source:
     source_name = str(source.identifier.name)
@@ -149,14 +154,14 @@ def sources_from_IMAS(
     if source_name == "pellet":
       # Pellet: particle source.
       profiles = _extract_source_profiles(
-          source, t_initial, affected_profiles=["n_e"]
+          source, t_initial, affected_profiles=["n_e"], time_provided = global_time_array
       )
       accumulator.add("pellet", profiles)
 
     elif source_name == "gas_puff":
       # Gas puff: particle source.
       profiles = _extract_source_profiles(
-          source, t_initial, affected_profiles=["n_e"]
+          source, t_initial, affected_profiles=["n_e"], time_provided = global_time_array
       )
       accumulator.add("gas_puff", profiles)
 
@@ -164,14 +169,14 @@ def sources_from_IMAS(
     elif source_name == "ec":
       # ECRH: electron heating and current drive.
       profiles = _extract_source_profiles(
-          source, t_initial, affected_profiles=["T_e", "psi"]
+          source, t_initial, affected_profiles=["T_e", "psi"], time_provided = global_time_array
       )
       accumulator.add("ecrh", profiles)
 
     elif source_name == "ic":
       # ICRH: ion heating and current drive.
       profiles = _extract_source_profiles(
-          source, t_initial, affected_profiles=["T_i", "T_e"]
+          source, t_initial, affected_profiles=["T_i", "T_e"], time_provided = global_time_array
       )
       accumulator.add("icrh", profiles)
 
@@ -179,38 +184,38 @@ def sources_from_IMAS(
       # Physics-based sources
       if source_name == "ohmic":
         profiles = _extract_source_profiles(
-            source, t_initial, affected_profiles=["T_e"]
+            source, t_initial, affected_profiles=["T_e"], time_provided = global_time_array
         )
         accumulator.add("ohmic", profiles)
 
       elif source_name == "fusion":
         profiles = _extract_source_profiles(
-            source, t_initial, affected_profiles=["T_i", "T_e"]
+            source, t_initial, affected_profiles=["T_i", "T_e"], time_provided = global_time_array
         )
         accumulator.add("fusion", profiles)
 
       elif source_name == "collisional_equipartition":
         profiles = _extract_source_profiles(
-            source, t_initial, affected_profiles=["T_i", "T_e"]
+            source, t_initial, affected_profiles=["T_i", "T_e"], time_provided = global_time_array
         )
         accumulator.add("ei_exchange", profiles)
 
       # Radiation sources
       elif source_name == "cyclotron_radiation":
         profiles = _extract_source_profiles(
-            source, t_initial, affected_profiles=["T_e"]
+            source, t_initial, affected_profiles=["T_e"], time_provided = global_time_array
         )
         accumulator.add("cyclotron_radiation", profiles)
 
       elif source_name == "bremsstrahlung":
         profiles = _extract_source_profiles(
-            source, t_initial, affected_profiles=["T_e"]
+            source, t_initial, affected_profiles=["T_e"], time_provided = global_time_array
         )
         accumulator.add("bremsstrahlung", profiles)
 
       elif source_name == "impurity_radiation":
         profiles = _extract_source_profiles(
-            source, t_initial, affected_profiles=["T_e"]
+            source, t_initial, affected_profiles=["T_e"], time_provided = global_time_array
         )
         accumulator.add("impurity_radiation", profiles)
 
@@ -221,6 +226,7 @@ def _extract_source_profiles(
     source: ids_structure.IDSStructure,
     t_initial: float | None = None,
     affected_profiles: Sequence[str] = _ALL_AFFECTED_PROFILES,
+    time_provided: Sequence[float] | None = None,
 ) -> SourceProfiles:
   """
   Extracts profiles for a given source from a core_sources IDS.
@@ -231,9 +237,17 @@ def _extract_source_profiles(
       affected_profiles: List of profiles to extract. Possible values: 
         ['psi', 'n_e', 'T_e', 'T_i']. If None, extracts all profiles.
   """
-  profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
-      source, t_initial
-  )
+  if time_provided is None:
+    profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
+        source, t_initial, get_time=True
+    )
+  else:
+    profiles_1d, rhon_array, time_array = loader.get_time_and_radial_arrays(
+        source, t_initial, get_time=False
+    )
+    time_array = time_provided
+    if t_initial:
+      time_array = [t - time_array[0] + t_initial for t in time_array]
   profiles = SourceProfiles(time=time_array, rhon=rhon_array)
 
   # Extract current profile
